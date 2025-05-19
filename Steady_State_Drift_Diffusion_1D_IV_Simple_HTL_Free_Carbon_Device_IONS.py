@@ -187,15 +187,18 @@ pCarbon = map_material_property(PS_ID, 'Nv') * np.exp(((map_material_property(Ca
 pFTO = map_material_property(TiO2_ID, 'Nv') * np.exp(((map_material_property(FTO_ID, "WF") - (map_material_property(TiO2_ID, "chi") +map_material_property(TiO2_ID, "Eg"))) / D))
 
 ############Recombination Constants############
+#Charge Carrier Lifetimes in the bulk (s)
 tau_p_bulk = 5 * 1.00e-9
 tau_n_bulk = 5 * 1.00e-9
-
+#Charge Carrier Lifetimes at the interface (s)
 tau_p_interface = 0.02 * 1.00e-9
 tau_n_interface = 0.02 * 1.00e-9
 
+#Here we define the mid-bandgap SRH trap energy level
 n_hat = map_material_property(PS_ID, 'Nc') * np.exp((1.00 / 2.00) * (-Eg_PS / D))
 p_hat = map_material_property(PS_ID, 'Nv') * np.exp((1.00 / 2.00) * (-Eg_PS / D))
 
+#Here we define the mixed band PS-HOMO/TiO2-LUMO SRH trap level
 n_hat_mixed = map_material_property(PS_ID, 'Nc') * np.exp((1.00 / 2.00) * (-((map_material_property(PS_ID, "chi") + map_material_property(PS_ID, "Eg"))-map_material_property(TiO2_ID, 'chi')) / D))
 p_hat_mixed = map_material_property(PS_ID, 'Nv') * np.exp((1.00 / 2.00) * (-((map_material_property(PS_ID, "chi") + map_material_property(PS_ID, "Eg"))-map_material_property(TiO2_ID, 'chi')) / D))
 
