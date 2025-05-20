@@ -82,7 +82,6 @@ kdata = AbsorptionData[:, 2]
 alphadata = 4 * np.pi * kdata / (AbsorptionData[:, 0] * 1.00e-9)
 
 ######Define Device Architecture
-ProblemDimension = 1 #1D or 2D
 DeviceArchitechture = np.empty((1650, 1))
 DeviceArchitechture[0:1600,:] = PS_ID #1600nm PS Absorber
 DeviceArchitechture[1600:1650,:] = TiO2_ID #50nm TiO2 ETL
@@ -119,7 +118,7 @@ else:
     TransmittedEnergy = np.zeros_like(GenRate_values_default)
 
 #Stretching in case finer meshing is needed
-if ProblemDimension == 1:
+if DeviceArchitechture.shape[1] == 1:
     DeviceArchitechture = cv.resize(DeviceArchitechture, None, fx=1.0, fy=StretchFactor, interpolation=cv.INTER_NEAREST)
     GenRate_values_default = cv.resize(GenRate_values_default, None, fx=1.0, fy=StretchFactor, interpolation=cv.INTER_NEAREST)
     PhotonFluxArray = cv.resize(PhotonFluxArray, None, fx=1.0, fy=StretchFactor, interpolation=cv.INTER_NEAREST)
@@ -203,20 +202,14 @@ p_hat_mixed = map_material_property(PS_ID, 'Nv') * np.exp((1.00 / 2.00) * (-((ma
 
 niPS = np.sqrt(Nc * Nv * np.exp(-Eg / D))
 
-def solve_for_voltage(voltage, dx, dy, nx, ny, ProblemDimension, SmoothFactor, StretchFactor, D, nFTO, nCarbon, pFTO, pCarbon , GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, carbon_mask, fto_mask, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, Eg_PS, niPS):
+def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nCarbon, pFTO, pCarbon , GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, carbon_mask, fto_mask, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, Eg_PS, niPS):
 
     #solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1) #Works out of the box with simple fipy installation, but slower than pysparse
     solver = fipy.solvers.pysparse.linearLUSolver.LinearLUSolver(precon=None, iterations=1) #Very fast solver
 
-    # Step 6: Create the Mesh
-    if ProblemDimension == 1:
-        mesh = fipy.Grid1D(dx=dx, nx=ny)
-        CarbonContactLocation = mesh.facesLeft
-        FTOContactLocation = mesh.facesRight
-    else:
-        mesh = fipy.Grid2D(dx=dx, dy=dy, nx=nx, ny=ny)
-        CarbonContactLocation = mesh.facesBottom
-        FTOContactLocation = mesh.facesTop
+    mesh = fipy.Grid2D(dx=dx, dy=dy, nx=nx, ny=ny)
+    CarbonContactLocation = mesh.facesBottom
+    FTOContactLocation = mesh.facesTop
 
     gen_rate = CellVariable(name="generation minus recombination rate", mesh=mesh, value=0.00)
     GenRate_values_default = GenRate_values_default.flatten()
@@ -447,14 +440,9 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, ProblemDimension, SmoothFactor, S
     NMatrix = np.reshape(nlocal.globalValue, (ny, nx))
     PMatrix = np.reshape(plocal.globalValue, (ny, nx))
 
-    if ProblemDimension == 1:
-        J_Total_Y = np.reshape(numerix.dot(Jph, [1]), (ny, nx))
-        Jn_Matrix = np.reshape(numerix.dot(Jn, [1]), (ny, nx))
-        Jp_Matrix = np.reshape(numerix.dot(Jp, [1]), (ny, nx))
-    else:
-        J_Total_Y = np.reshape(Jph[1], (ny, nx))
-        Jn_Matrix = np.reshape(Jn[1], (ny, nx))
-        Jp_Matrix = np.reshape(Jp[1], (ny, nx))
+    J_Total_Y = np.reshape(Jph[1], (ny, nx))
+    Jn_Matrix = np.reshape(Jn[1], (ny, nx))
+    Jp_Matrix = np.reshape(Jp[1], (ny, nx))
 
     chiMatrix = np.reshape(ChiCell.globalValue, (ny, nx))
     EgMatrix = np.reshape(EgCell.globalValue, (ny, nx))
@@ -500,7 +488,7 @@ def simulate_device(output_dir, additional_voltages=None, GenRate_values_default
         chunk_voltages = applied_voltages[start:start + chunk_size]
 
         # Parallel computation within the chunk
-        chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(delayed(solve_for_voltage)(voltage, dx, dy, nx, ny, ProblemDimension, SmoothFactor, StretchFactor, D, nFTO, nCarbon, pFTO, pCarbon, GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, carbon_mask, fto_mask, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, Eg_PS, niPS) for voltage in chunk_voltages)
+        chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(delayed(solve_for_voltage)(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nCarbon, pFTO, pCarbon, GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, carbon_mask, fto_mask, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, Eg_PS, niPS) for voltage in chunk_voltages)
 
         #DeepCopy To avoid overwriting the results in next loop
         copied_result = [copy.deepcopy(r) for r in chunk_results]
