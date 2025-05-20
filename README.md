@@ -16,7 +16,7 @@ A Finite Difference Multi-dimensional Electro-ionic Drift Diffusion Simulator fo
 </div>
 
 # Installation
-The code has been tested on miniforge with Python2.7 installed, which is necessary to be compatible with pysparse.
+The code has been tested on [miniforge](https://github.com/conda-forge/miniforge) with Python2.7 installed, which is necessary to be compatible with pysparse.
 
 ChargeFabrica requires the following packages to be installed: numpy, scipy, fipy (ideally with pysparse for optimum performance), joblib, multiprocessing, pandas, cv2, matplotlib
 
