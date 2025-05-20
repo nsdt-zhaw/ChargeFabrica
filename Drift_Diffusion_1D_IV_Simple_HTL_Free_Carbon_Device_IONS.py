@@ -84,8 +84,8 @@ alphadata = 4 * np.pi * kdata / (AbsorptionData[:, 0] * 1.00e-9)
 ######Define Device Architecture
 ProblemDimension = 1 #1D or 2D
 DeviceArchitechture = np.empty((1650, 1))
-DeviceArchitechture[0:1600,:] = 100 #1600nm PS Absorber
-DeviceArchitechture[1600:1650,:] = 150 #50nm TiO2 ETL
+DeviceArchitechture[0:1600,:] = PS_ID #1600nm PS Absorber
+DeviceArchitechture[1600:1650,:] = TiO2_ID #50nm TiO2 ETL
 
 GenRate_values_default = map_material_property(DeviceArchitechture, 'GenRate')
 epsilon_values = map_material_property(DeviceArchitechture, 'epsilon')
