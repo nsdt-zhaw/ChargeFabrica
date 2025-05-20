@@ -7,7 +7,6 @@ if os.name == 'nt':
     print("Windows")
 else:
     matplotlib.use('Agg')
-
 import matplotlib.pyplot as plt
 from mark_interface_file import mark_interfaces, mark_interfaces_mixed
 from calculate_absorption import calculate_absorption_above_bandgap
@@ -18,7 +17,6 @@ import pandas as pd
 import cv2 as cv
 from SmoothingFunction import smooth
 from fipy.tools import numerix
-from scipy.interpolate import griddata
 from joblib import Parallel, delayed
 import multiprocessing
 from material_maps import MATERIALS
@@ -34,7 +32,6 @@ Carbon_ID = 0
 PS_ID = 100
 TiO2_ID = 150
 FTO_ID = 200
-ZrO2_ID = 225
 def map_material_property(devarray, prop):
     return np.vectorize(lambda x: getattr(MATERIALS[x], prop))(devarray)
 
