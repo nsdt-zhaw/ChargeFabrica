@@ -23,3 +23,8 @@ ChargeFabrica requires the following packages to be installed: numpy, scipy, fip
 To further enhance 2D pysparse performance (especially if elements >100k), it is best to disable partial pivoting by navigating to the pysparse LU solver file:
 (For miniforge this would be (miniforge install directory)/envs/(environment name)/lib/python2.7/site-packages/fipy/solvers/pysparse/linearLUsolver.py)
 and then replacing the code line "LU = superlu.factorize(L.matrix.to_csr())" with "superlu.factorize(L.matrix.to_csr(), diag_pivot_thresh=0)".
+
+# Computation Time
+The 1D compute time with ions enabled on a Intel(R) Core(TM) i9-12900 desktop PC is roughly 1-2 minutes.
+The 2D compute time for ~100k elements is roughly 2 hours on a dedicated server with AMD EPYC 74F3 processor.
+It is therefore **strongly** recommended to test the code in 1D before moving to 2D.
