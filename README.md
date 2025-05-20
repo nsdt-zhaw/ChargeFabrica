@@ -21,5 +21,5 @@ The code has been tested on [miniforge](https://github.com/conda-forge/miniforge
 ChargeFabrica requires the following packages to be installed: numpy, scipy, fipy (ideally with pysparse for optimum performance), joblib, multiprocessing, pandas, xlrd, opencv, matplotlib
 
 To further enhance 2D pysparse performance (especially if elements >100k), it is best to disable partial pivoting by navigating to the pysparse LU solver file:
-(For miniforge this would be ./envs/(environment name)/lib/python2.7/site-packages/fipy/solvers/pysparse/linearLUsolver.py)
+(For miniforge this would be (miniforge install directory)/envs/(environment name)/lib/python2.7/site-packages/fipy/solvers/pysparse/linearLUsolver.py)
 and then replacing the code line "LU = superlu.factorize(L.matrix.to_csr())" with "superlu.factorize(L.matrix.to_csr(), diag_pivot_thresh=0)".
