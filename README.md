@@ -27,6 +27,6 @@ and then replacing the code line "LU = superlu.factorize(L.matrix.to_csr())" wit
 # Computation Time
 The 1D compute time with ions enabled on a Intel(R) Core(TM) i9-12900 desktop PC is roughly 1-2 minutes.
 
-The 2D compute time with ions for ~100k elements is roughly 2 hours on a dedicated server with AMD EPYC 74F3 processor.
+The 2D compute time with ions enabled on a dedicated server with AMD EPYC 74F3 processor for ~100k elements is roughly 2 hours.
 
 It is therefore **strongly** recommended to test the code in 1D before moving to 2D.
