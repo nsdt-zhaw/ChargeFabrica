@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+#This code is a simulation of a HTL-free perovskite solar cell using the finite volume method with the FiPy library.
+#Device architecture: FTO (Boundary)|TiO2 (50 nm)|MAPbI3 (1600 nm)|Carbon (Boundary)
 import os
 os.environ["OMP_NUM_THREADS"] = "1" #Really important! Pysparse doesnt benefit from multithreading.
 import numpy as np
@@ -170,7 +172,7 @@ LocationETL_Exact = mark_interfaces_mixed(DeviceArchitechture, TiO2_ID, PS_ID, 3
 SRH_Interfacial_Recombination_Zone = LocationETL_Exact
 
 print("Number of ETL interface nm: ", 1.00e9*dx*(np.count_nonzero(LocationETL_Exact)-1)/(nx))
-#print("Number of HTL interface nm: ", 1.00e9*dx*(np.count_nonzero(LocationHTL_Exact)-1)/(nx))
+#print("Number of HTL interface nm: ", 1.00e9*dx*(np.count_nonzero(LocationHTL_Exact)-1)/(nx)) NO HTL in this simulation!
 
 SRH_Bulk_Recombination_Zone = map_material_property(DeviceArchitechture, 'GenRate') - SRH_Interfacial_Recombination_Zone
 #Make negative values zero
@@ -213,30 +215,28 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, ProblemDimension, SmoothFactor, S
         mesh = fipy.Grid1D(dx=dx, nx=ny)
         CarbonContactLocation = mesh.facesLeft
         FTOContactLocation = mesh.facesRight
-
     else:
         mesh = fipy.Grid2D(dx=dx, dy=dy, nx=nx, ny=ny)
         CarbonContactLocation = mesh.facesBottom
         FTOContactLocation = mesh.facesTop
 
-    # Reshape GenRate_values to 1D array and set the values on the grid
-    Upmesh_default = CellVariable(name="generation minus recombination rate", mesh=mesh, value=0.000)
+    gen_rate = CellVariable(name="generation minus recombination rate", mesh=mesh, value=0.00)
     GenRate_values_default = GenRate_values_default.flatten()
-    Upmesh_default.setValue(GenRate_values_default)
+    gen_rate.setValue(GenRate_values_default)
 
-    Recombination_Langevin_Cell = CellVariable(name="Recombination_Langevin_Cell", mesh=mesh, value=0.000)
+    Recombination_Langevin_Cell = CellVariable(name="Recombination_Langevin_Cell", mesh=mesh, value=0.00)
     Recombination_Langevin_values = Recombination_Langevin_values.flatten()
     Recombination_Langevin_Cell.setValue(Recombination_Langevin_values)
 
-    Recombination_Bimolecular_Cell = CellVariable(name="Recombination_Bimolecular_Cell", mesh=mesh, value=0.000)
+    Recombination_Bimolecular_Cell = CellVariable(name="Recombination_Bimolecular_Cell", mesh=mesh, value=0.00)
     Recombination_Bimolecular_values = Recombination_Bimolecular_values.flatten()
     Recombination_Bimolecular_Cell.setValue(Recombination_Bimolecular_values)
 
-    Recombination_Interfacial_SRH_Cell = CellVariable(name="Recombination_SRH_Cell", mesh=mesh, value=0.000)
+    Recombination_Interfacial_SRH_Cell = CellVariable(name="Recombination_SRH_Cell", mesh=mesh, value=0.00)
     SRH_Interfacial_Recombination_Zone = flatten_smooth(SRH_Interfacial_Recombination_Zone, SmoothFactor * StretchFactor)
     Recombination_Interfacial_SRH_Cell.setValue(SRH_Interfacial_Recombination_Zone)
 
-    Recombination_Bulk_SRH_Cell = CellVariable(name="Recombination_SRH_Cell", mesh=mesh, value=0.000)
+    Recombination_Bulk_SRH_Cell = CellVariable(name="Recombination_SRH_Cell", mesh=mesh, value=0.00)
     SRH_Bulk_Recombination_Zone = flatten_smooth(SRH_Bulk_Recombination_Zone, SmoothFactor * StretchFactor)
     Recombination_Bulk_SRH_Cell.setValue(SRH_Bulk_Recombination_Zone)
 
@@ -247,25 +247,14 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, ProblemDimension, SmoothFactor, S
     anionmob.setValue(anion_mob_values)
     cationmob.setValue(cation_mob_values)
 
-    pmob_default = CellVariable(name="hole mobility", mesh=mesh, value=0.00)
-    nmob_default = CellVariable(name="electron mobility", mesh=mesh, value=0.00)
-    pmob_default.setValue(pmob_values)
-    nmob_default.setValue(nmob_values)
+    pmob = CellVariable(name="hole mobility", mesh=mesh, value=0.00)
+    nmob = CellVariable(name="electron mobility", mesh=mesh, value=0.00)
+    pmob.setValue(pmob_values)
+    nmob.setValue(nmob_values)
 
     epsilon = CellVariable(name="dielectric permittivity", mesh=mesh, value=0.00)
     epsilon.setValue(epsilon_values)
 
-    carbon_mask_cellvar = CellVariable(name="carbon", mesh=mesh, value=0.00)
-    carbon_mask = carbon_mask.flatten()
-    carbon_mask_cellvar.setValue(carbon_mask)
-
-    fto_mask_cellvar = CellVariable(name="fto", mesh=mesh, value=0.00)
-    fto_mask = fto_mask.flatten()
-    fto_mask_cellvar.setValue(fto_mask)
-
-    pmob = pmob_default  # Default value
-    nmob = nmob_default
-    gen_rate = Upmesh_default  # Placeholder for example extension
     NcCell = CellVariable(name="Effective Density of States CB", mesh=mesh, value=0.00)
     NcCell.setValue(Nc.flatten())
     NvCell = CellVariable(name="Effective Density of States VB", mesh=mesh, value=0.00)
@@ -319,7 +308,6 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, ProblemDimension, SmoothFactor, S
     ChiCell_c.setValue(chi_c.flatten())
     EgCell = CellVariable(name="Band Gap", mesh=mesh, value=0.00)
     EgCell.setValue(Eg.flatten())
-
     ZerosCellVariable = CellVariable(name="Zeros", mesh=mesh, value=0.00)
 
     phih = map_material_property(Carbon_ID, "WF")
@@ -329,12 +317,16 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, ProblemDimension, SmoothFactor, S
     philocal.constrain(0.00, where=FTOContactLocation)
     philocal.constrain(-(Vbi - voltage), where=CarbonContactLocation)
 
+    #Band-to-band recombination models
     Recombination_Langevin_EQ = (Recombination_Langevin_Cell * q * (pmob + nmob) * (nlocal * plocal - niPS * niPS) / (epsilon_values * epsilon_0))
     Recombination_Bimolecular_EQ = (Recombination_Bimolecular_Cell * (nlocal * plocal - niPS * niPS))
+
+    #SRH trap assisted recombination models
     Recombination_SRH_Interfacial_EQ = (Recombination_Interfacial_SRH_Cell * (nlocal * plocal - niPS * niPS) / (tau_p_interface * (nlocal + n_hat) + tau_n_interface * (plocal + p_hat)))
     Recombination_SRH_Interfacial_Mixed_EQ = (Recombination_Interfacial_SRH_Cell * (nlocal * plocal - niPS * niPS) / (tau_p_interface * (nlocal + n_hat_mixed) + tau_n_interface * (plocal + p_hat_mixed)))
     Recombination_SRH_Bulk_EQ = (Recombination_Bulk_SRH_Cell * (nlocal * plocal - niPS * niPS) / (tau_p_bulk * (nlocal + n_hat) + tau_n_bulk * (plocal + p_hat)))
 
+    #Ensure that recombination rates are non-negative
     Recombination_Langevin_EQ_ReLU = numerix.fmax(Recombination_Langevin_EQ, ZerosCellVariable)
     Recombination_Bimolecular_EQ_ReLU = numerix.fmax(Recombination_Bimolecular_EQ, ZerosCellVariable)
     Recombination_SRH_Interfacial_EQ_ReLU = numerix.fmax(Recombination_SRH_Interfacial_EQ, ZerosCellVariable)
@@ -533,7 +525,7 @@ def simulate_device(output_dir, additional_voltages=None, GenRate_values_default
     return copied_result
 
 def main_workflow():
-    voltage_sweep_output_dir = "./SimulateFIPY2DReal/Outputs/" + current_file + "/VoltageSweep"
+    voltage_sweep_output_dir = "./Outputs/" + current_file + "/VoltageSweep"
 
     if not os.path.exists(voltage_sweep_output_dir):
         os.makedirs(voltage_sweep_output_dir)
