@@ -510,7 +510,7 @@ def simulate_device(output_dir, additional_voltages=None, GenRate_values_default
         # Save dictionary of chunk_results as .npy files named after the key
         for result in copied_result:
             for key, value in result.items():
-                append_to_npy(f"{key}.npy", value)
+                append_to_npy(key + ".npy", value)
 
         #Save an array of all the voltages applied so far
         np.save(os.path.join(output_dir, "applied_voltages.npy"), applied_voltages[:start + len(chunk_voltages)])
