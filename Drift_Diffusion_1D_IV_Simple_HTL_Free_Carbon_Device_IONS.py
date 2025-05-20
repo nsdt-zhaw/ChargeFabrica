@@ -117,7 +117,7 @@ else:
     PhotonFluxArray = np.zeros_like(GenRate_values_default)
     TransmittedEnergy = np.zeros_like(GenRate_values_default)
 
-#Stretching in case finer meshing is needed
+#Stretching in case finer meshing is needed (Stretching of generation array is done afterwards since the 3D hyperspectral generation array may exhaust RAM on machine)
 if DeviceArchitechture.shape[1] == 1:
     DeviceArchitechture = cv.resize(DeviceArchitechture, None, fx=1.0, fy=StretchFactor, interpolation=cv.INTER_NEAREST)
     GenRate_values_default = cv.resize(GenRate_values_default, None, fx=1.0, fy=StretchFactor, interpolation=cv.INTER_NEAREST)
@@ -266,25 +266,6 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
 
     clocal = CellVariable(name="cation density", mesh=mesh, value=0.00)
     clocal.setValue(c_values)
-
-    LoadOldSolution = False
-
-    if LoadOldSolution:
-        voltage_sweep_output_dir_old = "./SimulateFIPY2DReal/OutputsIntermediate/Miguel_Eq_2D_24_03_2025_150nm_2k_Iter_Jn_Jp_10ns_SRH_0dot9V_PS_Nc_Nv1e25_Gummel_3XSweep_Fixed1e-9dt_Smooth0dot2/VoltageSweep"
-
-        phi_values_old = np.load(voltage_sweep_output_dir_old + "/phi.npy")
-        n_values_old = np.load(voltage_sweep_output_dir_old + "/n.npy")
-        p_values_old = np.load(voltage_sweep_output_dir_old + "/p.npy")
-        a_values_old = np.load(voltage_sweep_output_dir_old + "/AnionDensityMatrix.npy")
-        c_values_old = np.load(voltage_sweep_output_dir_old + "/CationDensityMatrix.npy")
-        applied_voltages_old = np.load(voltage_sweep_output_dir_old + "/applied_voltages.npy")
-
-        voltagevalue = np.where(applied_voltages_old == voltage)[0][0]
-        philocal.setValue(phi_values_old[voltagevalue])
-        nlocal.setValue(n_values_old[voltagevalue])
-        plocal.setValue(p_values_old[voltagevalue])
-        alocal.setValue(a_values_old[voltagevalue])
-        clocal.setValue(c_values_old[voltagevalue])
 
     nlocal.constrain(nFTO, where=FTOContactLocation)
     nlocal.constrain(nCarbon, where=CarbonContactLocation)
