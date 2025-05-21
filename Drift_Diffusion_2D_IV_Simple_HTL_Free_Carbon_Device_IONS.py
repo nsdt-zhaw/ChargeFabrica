@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-#This code is a simulation of a HTL-free perovskite solar cell using the finite volume method with the FiPy library.
-#Device architecture: FTO (Boundary)|TiO2 (50 nm)|MAPbI3 (1600 nm)|Carbon (Boundary)
+#This code is a simulation of a 2D carbon-based triple mesoscopic HTL-free device using the finite volume method with the FiPy library.
+#Device architecture: FTO (Boundary)|TiO2 (50 nm)|m-TiO2/MAPbI3 (150 nm)|m-ZrO2/MAPbI3 (1000 nm)|MAPbI3 (100 nm)|Carbon (Boundary)
 import os
 os.environ["OMP_NUM_THREADS"] = "1" #Really important! Pysparse doesnt benefit from multithreading.
 import numpy as np
@@ -85,10 +85,54 @@ AbsorptionData = np.genfromtxt("MAPI_tailfit_nk 1.txt", delimiter=",", skip_head
 kdata = AbsorptionData[:, 2]
 alphadata = 4 * np.pi * kdata / (AbsorptionData[:, 0] * 1.00e-9)
 
-######Define Device Architecture
-DeviceArchitechture = np.empty((1650, 1))
-DeviceArchitechture[0:1600,:] = PS_ID #1600nm PS Absorber
-DeviceArchitechture[1600:1650,:] = TiO2_ID #50nm TiO2 ETL
+######Define 2D Device Architecture
+ZirconiaLength = 1000 #1000nm of m-ZrO2
+MesoLength = 1150 #1150nm of m-TiO2 + m-ZrO2
+
+# Initialize array parameters for the sinosoidal structure
+SinusoidalArray = np.ones((MesoLength, 100), dtype=int) * PS_ID  # You can modify shape
+Amplitude = 20
+dwidth = 35
+desired_wavelength = 60  # explicitly set wavelength (the length of one full sine wave period)
+phase = 0  # fixed phase to start from the top of the sine wave
+
+# Compute Frequency based on desired fixed wavelength
+Frequency = SinusoidalArray.shape[0] / desired_wavelength
+
+# Calculate the vertical coordinate
+y_coords = np.arange(SinusoidalArray.shape[0])
+
+# Calculate horizontal positions for the sine wave:
+center_x = SinusoidalArray.shape[1] // 2
+
+x_positions = center_x + (Amplitude * np.sin(2 * np.pi * Frequency * y_coords / SinusoidalArray.shape[0] + phase)).astype(int)
+
+# Insert sine wave into your SinusoidalArray
+for dyyy in range(0, MesoLength-ZirconiaLength):
+    xpos = x_positions[dyyy]
+
+    x_start = max(xpos - dwidth // 2, 0)
+    x_end = min(xpos + dwidth // 2 + 1, SinusoidalArray.shape[1])  # +1 to include endpoint
+
+    SinusoidalArray[dyyy, x_start:x_end] = TiO2_ID
+
+# Insert sine wave into your SinusoidalArray
+for dyyy in range(MesoLength-ZirconiaLength, MesoLength):
+    xpos = x_positions[dyyy]
+
+    x_start = max(xpos - dwidth // 2, 0)
+    x_end = min(xpos + dwidth // 2 + 1, SinusoidalArray.shape[1])  # +1 to include endpoint
+
+    SinusoidalArray[dyyy, x_start:x_end] = ZrO2_ID
+
+#flip the SinusoidalArray
+SinusoidalArray = np.flip(SinusoidalArray, axis=0)
+
+DeviceArchitechture = np.empty((MesoLength + 150, 100))
+
+DeviceArchitechture[0:100,:] = PS_ID
+DeviceArchitechture[100:MesoLength+100,:] = SinusoidalArray
+DeviceArchitechture[(MesoLength+100):(MesoLength + 150),:] = TiO2_ID
 
 GenRate_values_default = map_material_property(DeviceArchitechture, 'GenRate')
 epsilon_values = map_material_property(DeviceArchitechture, 'epsilon')
@@ -327,7 +371,7 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     eqcontac = eq3 & eq4 #Anion and cation continuity equations
     eqpoisson = eq5 #Poisson equation
 
-    max_iterations = 1000 # Maximum iterations
+    max_iterations = 2000 # Maximum iterations
     dt = 1.00e-9 #Starting time step should be small
     dt_old = dt
     MaxTimeStep = 1.00e-5 #Increasing above 1.00e-5 sometimes leads to artefacts in the solution even if the residual is small
@@ -337,7 +381,7 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     TotalTime = 0.00
     residualarray = [1000]
     residual_old = 1.00e10
-    DampingFactor = 0.05 #Very important parameter!, stiff problems may require a smaller value
+    DampingFactor = 0.01 #Very important parameter!, stiff problems may require a smaller value
     NumberofSweeps = 1 #Number of sweeps at same time step, for very stiff problems it can be increased to 2 or 3, but at the cost of compute time.
 
     nold = nlocal.value
