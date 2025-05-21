@@ -3,6 +3,8 @@ A Finite Difference Multi-dimensional Electro-ionic Drift Diffusion Simulator fo
 
 <img src="https://github.com/user-attachments/assets/8fefefaf-dfd4-4be8-8c48-8add559b91da" width="200" alt="DOI" data-canonical-src="" style="max-width: 1%;">
 
+This Python-based solver uses [Fipy](https://github.com/usnistgov/fipy) to solve the semiconductor equations.
+
 <div class="grid cards" markdown>
 
 -   1D Simulation plot for FTO (Boundary)|TiO2 (50 nm)|MAPbI3 (1600 nm)|Carbon (Boundary) Cell
