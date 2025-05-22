@@ -37,6 +37,7 @@ It is therefore **strongly** recommended to test the code in 1D before moving to
 
 # Numerics and Damping
 Drift-Diffusion problems can be quite challenging to solve numerically, depending on the material parameters used and the geometry employed.
+
 If the desired residual isn't achieved due to frequent residual instabilities, then the DampingFactor ratio must be decreased. This comes at a cost of decreasing the effective time step, which often requires increasing the number of iterations necessary for convergence.
 
 **Note:** The residual may increase briefly for certain problems as the timestep is being dynamically increased. This usually does not require an adjustment of the DampingFactor.
