@@ -34,3 +34,14 @@ The 1D compute time with ions enabled on a Intel(R) Core(TM) i9-12900 desktop PC
 The 2D compute time with ions enabled on a dedicated server with AMD EPYC 74F3 processor for ~100k elements is roughly 2 hours.
 
 It is therefore **strongly** recommended to test the code in 1D before moving to 2D.
+
+# Numerics and Damping
+Drift-Diffusion problems can be quite challenging to solve numerically, depending on the material parameters used and the geometry employed.
+If the desired residual isn't achieved due to frequent residual instabilities, then the DampingFactor ratio must be decreased. This comes at a cost of decreasing the effective time step, which often requires increasing the number of iterations necessary for convergence.
+
+**Note:** The residual may increase briefly for certain problems as the timestep is being dynamically increased. This usually does not require an adjustment of the DampingFactor.
+For very stiff problems, it may be necessary to sweep the Poisson and electronic continuity equations multiple times per time step. However, the computational overhead of sweeping is very significant, and it is usually better to adjust the DampingFactor.
+
+
+
+
