@@ -1,11 +1,11 @@
-name: Spiro
-code: 300
+name: FTO2
+code: 248762749
 GenRate: 0.00
-epsilon: 5.0
-pmob: 1.00e-7
-nmob: 1.00e-7
-Eg: 3.02
-chi: 2.2
+epsilon: 1000.0
+pmob: 1.00e-4
+nmob: 1.00e-4
+Eg: 1.6
+chi: 3.9
 cationmob: 0.00
 anionmob: 0.00
 Recombination_Langevin: 0.00
@@ -16,4 +16,4 @@ Chi_a: 0.00
 Chi_c: 0.00
 a_initial_level: 1.00e23
 c_initial_level: 1.00e23
-WF: 0.00
+WF: 4.2
