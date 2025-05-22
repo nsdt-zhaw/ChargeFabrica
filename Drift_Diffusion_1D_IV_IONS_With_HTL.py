@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-#This code is a simulation of a HTL-free perovskite solar cell using the finite volume method with the FiPy library.
-#Device architecture: FTO (Boundary)|TiO2 (50 nm)|MAPbI3 (1600 nm)|Gold (Boundary)
+#This code is a simulation of a NIP planar perovskite solar cell using the finite volume method with the FiPy library.
+#Device architecture: FTO (Boundary)|TiO2 (50 nm)|MAPbI3 (400 nm)|Spiro-OMeTAD (50 nm)|Gold (Boundary)
 import os
 os.environ["OMP_NUM_THREADS"] = "1" #Really important! Pysparse doesnt benefit from multithreading.
 import numpy as np
