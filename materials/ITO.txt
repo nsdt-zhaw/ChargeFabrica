@@ -1,5 +1,5 @@
-name: FTO
-code: 200
+name: ITO
+code: 888
 GenRate: 0.00
 epsilon: 1000.0
 pmob: 1.00e-4
@@ -16,6 +16,6 @@ Chi_a: 0.00
 Chi_c: 0.00
 a_initial_level: 1.00e23
 c_initial_level: 1.00e23
-WF: 4.4
+WF: 5.20
 Nd: 0.00
 Na: 0.00

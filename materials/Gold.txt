@@ -17,3 +17,5 @@ Chi_c: 0.00
 a_initial_level: 1.00e23
 c_initial_level: 1.00e23
 WF: 5.00
+Nd: 0.00
+Na: 0.00
