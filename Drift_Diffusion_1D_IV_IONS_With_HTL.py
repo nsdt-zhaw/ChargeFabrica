@@ -108,6 +108,8 @@ chi_a = map_material_property(DeviceArchitechture, 'Chi_a')
 chi_c = map_material_property(DeviceArchitechture, 'Chi_c')
 a_initial_values = map_material_property(DeviceArchitechture, 'a_initial_level')
 c_initial_values = map_material_property(DeviceArchitechture, 'c_initial_level')
+Nd_values = map_material_property(DeviceArchitechture, 'Nd')
+Na_values = map_material_property(DeviceArchitechture, 'Na')
 
 EffectiveMediumApproximationVolumeFraction = 1.00
 
@@ -207,7 +209,7 @@ p_hat_mixed = map_material_property(PS_ID, 'Nv') * np.exp((1.00 / 2.00) * (-((ma
 
 niPS = np.sqrt(Nc * Nv * np.exp(-Eg / D))
 
-def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nGold, pFTO, pGold , GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, gold_mask, fto_mask, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, Eg_PS, niPS):
+def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nGold, pFTO, pGold , GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, gold_mask, fto_mask, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, Eg_PS, niPS, Nd_values, Na_values):
 
     #solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1) #Works out of the box with simple fipy installation, but slower than pysparse
     solver = fipy.solvers.pysparse.linearLUSolver.LinearLUSolver(precon=None, iterations=1) #Very fast solver
@@ -287,6 +289,11 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     EgCell.setValue(Eg.flatten())
     ZerosCellVariable = CellVariable(name="Zeros", mesh=mesh, value=0.00)
 
+    NdCell = CellVariable(name="Fixed Ionised Donors", mesh=mesh, value=0.00)
+    NdCell.setValue(Nd_values.flatten())
+    NaCell = CellVariable(name="Fixed Ionised Acceptor", mesh=mesh, value=0.00)
+    NaCell.setValue(Na_values.flatten())
+
     phih = map_material_property(Gold_ID, "WF")
     phin = map_material_property(FTO_ID, "WF")
     Vbi = (phih - phin)
@@ -322,7 +329,7 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     eq2 = (0.00 == -TransientTerm(coeff=q, var=plocal) + DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=plocal) + ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * (HOMO - D*LogNvCell).faceGrad, var=plocal) + q*gen_rate - q*Recombination_Combined)
     eq3 = (0.00 == -TransientTerm(coeff=q, var=alocal) + DiffusionTerm(coeff=q * D * anionmob.harmonicFaceValue, var=alocal) - ExponentialConvectionTerm(coeff=q * anionmob.harmonicFaceValue * LUMO_a.faceGrad, var=alocal))
     eq4 = (0.00 == -TransientTerm(coeff=q, var=clocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=clocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * LUMO_c.faceGrad, var=clocal))
-    eq5 = (0.00 == -TransientTerm(var=philocal) + DiffusionTerm(coeff=epsilon, var=philocal) + (q/epsilon_0) * (plocal - nlocal + clocal - alocal))
+    eq5 = (0.00 == -TransientTerm(var=philocal) + DiffusionTerm(coeff=epsilon, var=philocal) + (q/epsilon_0) * (plocal - nlocal + clocal - alocal + NdCell - NaCell))
 
     eqconteh = eq1 & eq2 #Electron and hole continuity equations
     eqcontac = eq3 & eq4 #Anion and cation continuity equations
@@ -474,7 +481,7 @@ def simulate_device(output_dir, additional_voltages=None, GenRate_values_default
         chunk_voltages = applied_voltages[start:start + chunk_size]
 
         # Parallel computation within the chunk
-        chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(delayed(solve_for_voltage)(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nGold, pFTO, pGold, GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, gold_mask, fto_mask, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, Eg_PS, niPS) for voltage in chunk_voltages)
+        chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(delayed(solve_for_voltage)(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nGold, pFTO, pGold, GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, gold_mask, fto_mask, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, Eg_PS, niPS, Nd_values, Na_values) for voltage in chunk_voltages)
 
         #DeepCopy To avoid overwriting the results in next loop
         copied_result = [copy.deepcopy(r) for r in chunk_results]
