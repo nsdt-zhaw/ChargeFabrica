@@ -2,7 +2,7 @@ import os
 
 class Material(object):
     def __init__(self, name, code, GenRate, epsilon, pmob, nmob, Eg, chi, cationmob, anionmob, Recombination_Langevin,
-                 Recombination_Bimolecular, Nc, Nv, Chi_a, Chi_c, a_initial_level, c_initial_level, WF):
+                 Recombination_Bimolecular, Nc, Nv, Chi_a, Chi_c, a_initial_level, c_initial_level, WF, Nd, Na):
         self.name = name
         self.code = code
         self.GenRate = GenRate
@@ -22,6 +22,8 @@ class Material(object):
         self.a_initial_level = a_initial_level
         self.c_initial_level = c_initial_level
         self.WF = WF
+        self.Nd = Nd
+        self.Na = Na
 
 def load_material_from_txt(path):
     fields = {}
