@@ -159,14 +159,6 @@ Nv = flatten_smooth(Nv, SmoothFactor*StretchFactor)
 LogNv = flatten_smooth(LogNv, SmoothFactor*StretchFactor)
 Eg = flatten_smooth(Eg, SmoothFactor*StretchFactor)
 
-gold_mask = np.where(DeviceArchitechture == Gold_ID, 1.00, 0.00)
-fto_mask = np.where(DeviceArchitechture == FTO_ID, 1.00, 0.00)
-
-gold_mask = gold_mask.flatten()
-fto_mask = fto_mask.flatten()
-
-ElectrodeMask = gold_mask + fto_mask
-
 #LocationSRH_HTL = mark_interfaces(DeviceArchitechture, 50, PS_ID)
 #mark_interfaces() places the interface inside the absorber
 LocationSRH_ETL = mark_interfaces(DeviceArchitechture, TiO2_ID, PS_ID)
@@ -209,7 +201,7 @@ p_hat_mixed = map_material_property(PS_ID, 'Nv') * np.exp((1.00 / 2.00) * (-((ma
 
 niPS = np.sqrt(Nc * Nv * np.exp(-Eg / D))
 
-def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nGold, pFTO, pGold , GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, gold_mask, fto_mask, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, Eg_PS, niPS, Nd_values, Na_values):
+def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nGold, pFTO, pGold , GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, Eg_PS, niPS, Nd_values, Na_values):
 
     #solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1) #Works out of the box with simple fipy installation, but slower than pysparse
     solver = fipy.solvers.pysparse.linearLUSolver.LinearLUSolver(precon=None, iterations=1) #Very fast solver
@@ -481,7 +473,7 @@ def simulate_device(output_dir, additional_voltages=None, GenRate_values_default
         chunk_voltages = applied_voltages[start:start + chunk_size]
 
         # Parallel computation within the chunk
-        chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(delayed(solve_for_voltage)(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nGold, pFTO, pGold, GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, gold_mask, fto_mask, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, Eg_PS, niPS, Nd_values, Na_values) for voltage in chunk_voltages)
+        chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(delayed(solve_for_voltage)(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nGold, pFTO, pGold, GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, Eg_PS, niPS, Nd_values, Na_values) for voltage in chunk_voltages)
 
         #DeepCopy To avoid overwriting the results in next loop
         copied_result = [copy.deepcopy(r) for r in chunk_results]
