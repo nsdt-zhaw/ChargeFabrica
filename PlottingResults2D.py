@@ -1,11 +1,14 @@
 import numpy as np
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from matplotlib.widgets import Slider
 from scipy.interpolate import interp1d
 from scipy import signal
 
-Simulation_folder = "<Path to Output Folder>/VoltageSweep/"
+
+Simulation_folder = "./Outputs/Drift_Diffusion_2D_IV_Simple_HTL_Free_Carbon_Device_IONS/VoltageSweep/"
 
 NumberOfSuns = 1.00
 
@@ -21,11 +24,10 @@ class PercentileNormalizer(Normalize):
         if self.vmax is None and np.size(A) > 0:
             self.vmax = np.percentile(A, self.upper_percentile)
 
-
 # Load matrices as before
 GenerationMatrix = np.load(Simulation_folder + "GenValues_Matrix.npy")
 RecombinationMatrix = np.load(Simulation_folder + "RecombinationMatrix.npy")
-RadiativeRecombinationMatrix = np.load(Simulation_folder + "Recombination_Bimolecular_EQ_ReLUMatrix.npy")
+RadiativeRecombinationMatrix = np.load(Simulation_folder + "Recombination_Bimolecular_EQMatrix.npy")
 PMatrix = np.load(Simulation_folder + "PMatrix.npy")
 NMatrix = np.load(Simulation_folder + "NMatrix.npy")
 JTotal_Y = np.load(Simulation_folder + "J_Total_Y.npy")
@@ -33,12 +35,12 @@ JTotal_Y = np.load(Simulation_folder + "J_Total_Y.npy")
 for i in range(JTotal_Y.shape[0]):
     JTotal_Y[i] = signal.medfilt2d(JTotal_Y[i], kernel_size=5)
 
-Jn_Matrix = np.load(Simulation_folder + "Jn_Matrix.npy")
+Jn_Matrix = np.load(Simulation_folder + "Jn_Matrix.npy")[:,1,:,:]
 
 for i in range(Jn_Matrix.shape[0]):
     Jn_Matrix[i] = signal.medfilt2d(Jn_Matrix[i], kernel_size=5)
 
-Jp_Matrix = np.load(Simulation_folder + "Jp_Matrix.npy")
+Jp_Matrix = np.load(Simulation_folder + "Jp_Matrix.npy")[:,1,:,:]
 
 for i in range(Jp_Matrix.shape[0]):
     Jp_Matrix[i] = signal.medfilt2d(Jp_Matrix[i], kernel_size=5)
@@ -49,7 +51,7 @@ VocLocation = np.unravel_index(np.argmin(np.abs(JTotal_Y_mean)), JTotal_Y_mean.s
 PLYield = 100*RadiativeRecombinationMatrix / (GenerationMatrix+1)
 
 PotentialMatrix = np.load(Simulation_folder + "PotentialMatrix.npy")
-EField_matrix = np.gradient(PotentialMatrix, axis=1)/1.00e-9
+EField_matrix = -np.load(Simulation_folder + "Efield_matrix.npy")[:,1,:,:]
 psinvarmatrix = np.load(Simulation_folder + "psinvarmatrix.npy")
 psipvarmatrix = np.load(Simulation_folder + "psipvarmatrix.npy")
 ChiMatrix = np.load(Simulation_folder + "ChiMatrix.npy")
@@ -94,7 +96,7 @@ for i, matrix in enumerate(data_matrices):
     norm.autoscale_None(matrix[0])
     cax = axs[i].imshow(matrix[0], cmap='viridis', norm=norm)
     cbar = fig.colorbar(cax, ax=axs[i])
-    axs[i].set_title(f"{titles[i]} at {applied_voltages[0]:.3f} V")
+    axs[i].set_title("{} at {:.3f} V".format(titles[i], applied_voltages[0]))
     cax_list.append(cax)
     colorbars.append(cbar)
 
@@ -103,12 +105,10 @@ fig.subplots_adjust(left=0.12, right=0.88, top=0.93, bottom=0.12, wspace=0.2, hs
 
 # Slider axis (center slider position to avoid left gap)
 slider_ax = plt.axes([0.2, 0.03, 0.6, 0.025])
-slider = Slider(ax=slider_ax, label='Voltage [V]', valmin=applied_voltages.min(),
-                valmax=applied_voltages.max(), valinit=applied_voltages[0])
+slider = Slider(ax=slider_ax, label='Voltage [V]', valmin=applied_voltages.min(), valmax=applied_voltages.max(), valinit=applied_voltages[0])
 
 # Find an interpolation function from voltage to indices
-interp_indices = interp1d(applied_voltages, np.arange(len(applied_voltages)), bounds_error=False,
-                          fill_value="extrapolate")
+interp_indices = interp1d(applied_voltages, np.arange(len(applied_voltages)), bounds_error=False,fill_value="extrapolate")
 
 JTotal_Y_mean = np.mean(JTotal_Y[:,20:80,:], axis=(1, 2))
 
@@ -129,12 +129,10 @@ if len(applied_voltages) > 3:
     max_power_current = JTotal_Y_fine[max_power_index]
 
     #Efficiency is the ratio of maximum power to the product of the open circuit voltage and short circuit current
-    print(f"Maximum power point: {max_power_voltage:.3f} V, {max_power_current:.3f} A/m^2")
     MaxPowerOut = max_power_voltage * max_power_current * -1 #Units of W/m^2
     MaxPowerIn = NumberOfSuns * 1000 #Units of W/m^2
 
     Efficiency = (MaxPowerOut/MaxPowerIn)*100
-    print(f"Efficiency: {Efficiency:.3f}")
 
     fig2, ax2 = plt.subplots()
 
@@ -147,9 +145,9 @@ if len(applied_voltages) > 3:
     ax2.axvline(max_power_voltage, color='r', linestyle='--')
     ax2.axhline(max_power_current, color='r', linestyle='--')
     # Add a text label for the maximum power point, fill factor, and efficiency
-    ax2.text(0.05, 0.70, f"Efficiency: {Efficiency:.3f}%", fontsize=8, transform=ax2.transAxes)
-    ax2.text(0.05, 0.65, f"Fill Factor: {(MaxPowerOut/(Voc*Jsc))*100:.3f}%", fontsize=8, transform=ax2.transAxes)
-    ax2.text(0.05, 0.60, f"MPP: {max_power_voltage:.3f} V, {max_power_current:.3f} A/m^2", fontsize=8, transform=ax2.transAxes)
+    ax2.text(0.05, 0.70, "Efficiency: {:.3f}%".format(Efficiency), fontsize=8, transform=ax2.transAxes)
+    #ax2.text(0.05, 0.65, "Fill Factor: {:.3f}%".format((MaxPowerOut/(Voc*Jsc))*100), fontsize=8, transform=ax2.transAxes)
+    ax2.text(0.05, 0.60, "MPP: {:.3f} V, {:.3f} A/m^2".format(max_power_voltage, max_power_current), fontsize=8, transform=ax2.transAxes)
 
     #ax2.set_ylim(-Jsc-10, Jsc+10)
     ax2.set_ylim(-250 - 10, 250 + 10)
@@ -178,11 +176,11 @@ def update(val):
         cax_list[i].set_data(matrix[frame])
         norms[i].autoscale_None(matrix[frame])  # re-autoscale for each frame, optional
         cax_list[i].set_norm(norms[i])
-        axs[i].set_title(f"{titles[i]} at {applied_voltages[frame]:.3f} V")
+        axs[i].set_title("{} at {:.3f} V".format(titles[i], applied_voltages[frame]))
         cax_list[i].autoscale()
 
     fig.canvas.draw_idle()
 
-
+update(0) # Initial call to display the first frame
 slider.on_changed(update)
 plt.show()

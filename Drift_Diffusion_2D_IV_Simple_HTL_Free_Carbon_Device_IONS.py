@@ -36,7 +36,7 @@ Carbon_ID = name_to_code["Carbon"]
 PS_ID = name_to_code["PS"]
 TiO2_ID = name_to_code["mTiO2"]
 FTO_ID = name_to_code["FTO"]
-ZrO2_ID = name_to_code["ZrO2.txt"]
+ZrO2_ID = name_to_code["ZrO2"]
 
 def map_material_property(devarray, prop):
     return np.vectorize(lambda x: getattr(MATERIALS[x], prop))(devarray)
@@ -234,13 +234,16 @@ tau_n_bulk = 5 * 1.00e-9
 tau_p_interface = 0.02 * 1.00e-9
 tau_n_interface = 0.02 * 1.00e-9
 
+Etrap = map_material_property(PS_ID, "chi") + map_material_property(PS_ID, "Eg")/2 #Mid-bandgap trap energy level in eV
+Etrap_interface = map_material_property(TiO2_ID, "chi") + ((map_material_property(PS_ID, "chi") + map_material_property(PS_ID, "Eg"))-map_material_property(TiO2_ID, 'chi'))/2
+
 #Here we define the mid-bandgap SRH trap energy level
-n_hat = map_material_property(PS_ID, 'Nc') * np.exp((1.00 / 2.00) * (-Eg_PS / D))
-p_hat = map_material_property(PS_ID, 'Nv') * np.exp((1.00 / 2.00) * (-Eg_PS / D))
+n_hat = map_material_property(PS_ID, 'Nc') * np.exp((map_material_property(PS_ID, "chi") - Etrap) / D)
+p_hat = map_material_property(PS_ID, 'Nv') * np.exp((Etrap - map_material_property(PS_ID, "chi") - map_material_property(PS_ID, "Eg")) / D)
 
 #Here we define the mixed band PS-HOMO/TiO2-LUMO SRH trap level
-n_hat_mixed = map_material_property(PS_ID, 'Nc') * np.exp((1.00 / 2.00) * (-((map_material_property(PS_ID, "chi") + map_material_property(PS_ID, "Eg"))-map_material_property(TiO2_ID, 'chi')) / D))
-p_hat_mixed = map_material_property(PS_ID, 'Nv') * np.exp((1.00 / 2.00) * (-((map_material_property(PS_ID, "chi") + map_material_property(PS_ID, "Eg"))-map_material_property(TiO2_ID, 'chi')) / D))
+n_hat_mixed = map_material_property(PS_ID, 'Nc') * np.exp((map_material_property(TiO2_ID, "chi") - Etrap_interface) / D)
+p_hat_mixed = map_material_property(PS_ID, 'Nv') * np.exp((Etrap_interface - map_material_property(PS_ID, "chi") - map_material_property(PS_ID, "Eg")) / D)
 
 niPS = np.sqrt(Nc * Nv * np.exp(-Eg / D))
 
@@ -322,7 +325,6 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     ChiCell_c.setValue(chi_c.flatten())
     EgCell = CellVariable(name="Band Gap", mesh=mesh, value=0.00)
     EgCell.setValue(Eg.flatten())
-    ZerosCellVariable = CellVariable(name="Zeros", mesh=mesh, value=0.00)
 
     NdCell = CellVariable(name="Fixed Ionised Donors", mesh=mesh, value=0.00)
     NdCell.setValue(Nd_values.flatten())
@@ -345,14 +347,7 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     Recombination_SRH_Interfacial_Mixed_EQ = (Recombination_Interfacial_SRH_Cell * (nlocal * plocal - niPS * niPS) / (tau_p_interface * (nlocal + n_hat_mixed) + tau_n_interface * (plocal + p_hat_mixed)))
     Recombination_SRH_Bulk_EQ = (Recombination_Bulk_SRH_Cell * (nlocal * plocal - niPS * niPS) / (tau_p_bulk * (nlocal + n_hat) + tau_n_bulk * (plocal + p_hat)))
 
-    #Ensure that recombination rates are non-negative
-    Recombination_Langevin_EQ_ReLU = numerix.fmax(Recombination_Langevin_EQ, ZerosCellVariable)
-    Recombination_Bimolecular_EQ_ReLU = numerix.fmax(Recombination_Bimolecular_EQ, ZerosCellVariable)
-    Recombination_SRH_Interfacial_EQ_ReLU = numerix.fmax(Recombination_SRH_Interfacial_EQ, ZerosCellVariable)
-    Recombination_SRH_Interfacial_Mixed_EQ_ReLU = numerix.fmax(Recombination_SRH_Interfacial_Mixed_EQ, ZerosCellVariable)
-    Recombination_SRH_Bulk_EQ_ReLU = numerix.fmax(Recombination_SRH_Bulk_EQ, ZerosCellVariable)
-
-    Recombination_Combined = (Recombination_Bimolecular_EQ_ReLU + Recombination_SRH_Bulk_EQ_ReLU + Recombination_SRH_Interfacial_Mixed_EQ_ReLU) #Include more recombination mechanisms by adding them to this line
+    Recombination_Combined = (Recombination_Bimolecular_EQ + Recombination_SRH_Bulk_EQ + Recombination_SRH_Interfacial_Mixed_EQ) #Include more recombination mechanisms by adding them to this line
 
     LUMO = philocal + ChiCell
     HOMO = philocal + ChiCell + EgCell
@@ -373,14 +368,14 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     max_iterations = 2000 # Maximum iterations
     dt = 1.00e-9 #Starting time step should be small
     dt_old = dt
-    MaxTimeStep = 1.00e-5 #Increasing above 1.00e-5 sometimes leads to artefacts in the solution even if the residual is small
+    MaxTimeStep = 1.00e-6 #Increasing above 1.00e-5 sometimes leads to artefacts in the solution even if the residual is small
     desired_residual = 1.00e-10
     SweepCounter = 0
     residual = 1.00
     TotalTime = 0.00
     residualarray = [1000]
     residual_old = 1.00e10
-    DampingFactor = 0.01 #Very important parameter!, stiff problems may require a smaller value
+    DampingFactor = 0.05 #Very important parameter!, stiff problems may require a smaller value
     NumberofSweeps = 1 #Number of sweeps at same time step, for very stiff problems it can be increased to 2 or 3, but at the cost of compute time.
 
     nold = nlocal.value
@@ -456,21 +451,18 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     # Calculation of E-field
     E = -philocal.grad  #Vector Quantity
 
-    # Calculation of E-field magnitude
-    Efield = E.mag  #Scalar Quantity
+    Efield_matrix = np.reshape(E.globalValue, (E.shape[0], ny, nx))
 
-    #Reshaping variables back into square grid
-    Efield_matrix = np.reshape(Efield.globalValue, (ny, nx))
     PotentialMatrix = np.reshape(philocal.globalValue, (ny, nx))
     GenValues_Matrix = np.reshape(gen_rate.globalValue, (ny, nx))
     RecombinationMatrix = (np.reshape(Recombination_Combined.globalValue,(ny, nx)))
-    Recombination_Bimolecular_EQ_ReLUMatrix = (np.reshape(Recombination_Bimolecular_EQ_ReLU.globalValue,(ny, nx)))
+    Recombination_Bimolecular_EQMatrix = (np.reshape(Recombination_Bimolecular_EQ.globalValue,(ny, nx)))
     NMatrix = np.reshape(nlocal.globalValue, (ny, nx))
     PMatrix = np.reshape(plocal.globalValue, (ny, nx))
 
     J_Total_Y = np.reshape(Jph[1], (ny, nx))
-    Jn_Matrix = np.reshape(Jn[1], (ny, nx))
-    Jp_Matrix = np.reshape(Jp[1], (ny, nx))
+    Jn_Matrix = np.reshape(Jn, (Jn.shape[0], ny, nx))
+    Jp_Matrix = np.reshape(Jp, (Jp.shape[0], ny, nx))
 
     chiMatrix = np.reshape(ChiCell.globalValue, (ny, nx))
     EgMatrix = np.reshape(EgCell.globalValue, (ny, nx))
@@ -478,7 +470,7 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     psinvarmatrix = np.reshape(psinvar.globalValue, (ny, nx))
     psipvarmatrix = np.reshape(psipvar.globalValue, (ny, nx))
 
-    return {"E": E, "NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "J_Total_Y": J_Total_Y, "n": nlocal.globalValue, "p": plocal.globalValue, "phi": philocal.globalValue, "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue, "CationDensityMatrix": clocal.globalValue, "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Jn_Matrix": Jn_Matrix, "Jp_Matrix": Jp_Matrix, "Recombination_Bimolecular_EQ_ReLUMatrix": Recombination_Bimolecular_EQ_ReLUMatrix}
+    return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "J_Total_Y": J_Total_Y, "n": nlocal.globalValue, "p": plocal.globalValue, "phi": philocal.globalValue, "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue, "CationDensityMatrix": clocal.globalValue, "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Jn_Matrix": Jn_Matrix, "Jp_Matrix": Jp_Matrix, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix}
 
 def simulate_device(output_dir, additional_voltages=None, GenRate_values_default=GenRate_values_default, Recombination_Langevin_values=Recombination_Langevin_values, Recombination_Bimolecular_values=Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone=SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone=SRH_Bulk_Recombination_Zone):
 
