@@ -302,14 +302,7 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     Recombination_SRH_Interfacial_Mixed_EQ = (Recombination_Interfacial_SRH_Cell * (nlocal * plocal - niPS * niPS) / (tau_p_interface * (nlocal + n_hat_mixed) + tau_n_interface * (plocal + p_hat_mixed)))
     Recombination_SRH_Bulk_EQ = (Recombination_Bulk_SRH_Cell * (nlocal * plocal - niPS * niPS) / (tau_p_bulk * (nlocal + n_hat) + tau_n_bulk * (plocal + p_hat)))
 
-    #Ensure that recombination rates are non-negative
-    Recombination_Langevin_EQ_ReLU = numerix.fmax(Recombination_Langevin_EQ, ZerosCellVariable)
-    Recombination_Bimolecular_EQ_ReLU = numerix.fmax(Recombination_Bimolecular_EQ, ZerosCellVariable)
-    Recombination_SRH_Interfacial_EQ_ReLU = numerix.fmax(Recombination_SRH_Interfacial_EQ, ZerosCellVariable)
-    Recombination_SRH_Interfacial_Mixed_EQ_ReLU = numerix.fmax(Recombination_SRH_Interfacial_Mixed_EQ, ZerosCellVariable)
-    Recombination_SRH_Bulk_EQ_ReLU = numerix.fmax(Recombination_SRH_Bulk_EQ, ZerosCellVariable)
-
-    Recombination_Combined = (Recombination_Bimolecular_EQ_ReLU + Recombination_SRH_Bulk_EQ_ReLU) #Include more recombination mechanisms by adding them to this line
+    Recombination_Combined = (Recombination_Bimolecular_EQ + Recombination_SRH_Bulk_EQ) #Include more recombination mechanisms by adding them to this line
 
     LUMO = philocal + ChiCell
     HOMO = philocal + ChiCell + EgCell
@@ -331,7 +324,7 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     dt = 1.00e-9 #Starting time step should be small
     dt_old = dt
     MaxTimeStep = 1.00e-5 #Increasing above 1.00e-5 sometimes leads to artefacts in the solution even if the residual is small
-    desired_residual = 1.00e-10
+    desired_residual = 1.00e-15
     SweepCounter = 0
     residual = 1.00
     TotalTime = 0.00
@@ -421,7 +414,7 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     PotentialMatrix = np.reshape(philocal.globalValue, (ny, nx))
     GenValues_Matrix = np.reshape(gen_rate.globalValue, (ny, nx))
     RecombinationMatrix = (np.reshape(Recombination_Combined.globalValue,(ny, nx)))
-    Recombination_Bimolecular_EQ_ReLUMatrix = (np.reshape(Recombination_Bimolecular_EQ_ReLU.globalValue,(ny, nx)))
+    Recombination_Bimolecular_EQMatrix = (np.reshape(Recombination_Bimolecular_EQ.globalValue,(ny, nx)))
     NMatrix = np.reshape(nlocal.globalValue, (ny, nx))
     PMatrix = np.reshape(plocal.globalValue, (ny, nx))
 
@@ -435,7 +428,7 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     psinvarmatrix = np.reshape(psinvar.globalValue, (ny, nx))
     psipvarmatrix = np.reshape(psipvar.globalValue, (ny, nx))
 
-    return {"E": E, "NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "J_Total_Y": J_Total_Y, "n": nlocal.globalValue, "p": plocal.globalValue, "phi": philocal.globalValue, "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue, "CationDensityMatrix": clocal.globalValue, "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Jn_Matrix": Jn_Matrix, "Jp_Matrix": Jp_Matrix, "Recombination_Bimolecular_EQ_ReLUMatrix": Recombination_Bimolecular_EQ_ReLUMatrix}
+    return {"E": E, "NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "J_Total_Y": J_Total_Y, "n": nlocal.globalValue, "p": plocal.globalValue, "phi": philocal.globalValue, "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue, "CationDensityMatrix": clocal.globalValue, "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Jn_Matrix": Jn_Matrix, "Jp_Matrix": Jp_Matrix, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix}
 
 def simulate_device(output_dir, additional_voltages=None, GenRate_values_default=GenRate_values_default, Recombination_Langevin_values=Recombination_Langevin_values, Recombination_Bimolecular_values=Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone=SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone=SRH_Bulk_Recombination_Zone):
 

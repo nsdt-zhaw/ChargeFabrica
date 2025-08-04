@@ -1,10 +1,11 @@
 import os
+import hashlib
 
 class Material(object):
-    def __init__(self, name, code, GenRate, epsilon, pmob, nmob, Eg, chi, cationmob, anionmob, Recombination_Langevin,
+    def __init__(self, name, GenRate, epsilon, pmob, nmob, Eg, chi, cationmob, anionmob, Recombination_Langevin,
                  Recombination_Bimolecular, Nc, Nv, Chi_a, Chi_c, a_initial_level, c_initial_level, WF, Nd, Na):
         self.name = name
-        self.code = code
+        self.code = self.generate_code(name)
         self.GenRate = GenRate
         self.epsilon = epsilon
         self.pmob = pmob
@@ -24,6 +25,14 @@ class Material(object):
         self.WF = WF
         self.Nd = Nd
         self.Na = Na
+
+    @staticmethod
+    def generate_code(name):
+        # Generate stable integer code from name string using MD5 hash
+        md5_hash = hashlib.md5(name.encode('utf-8')).hexdigest()
+        # Take first 8 characters and convert to int base 16 (32 bits)
+        code = int(md5_hash[:8], 16)
+        return code
 
 def load_material_from_txt(path):
     fields = {}
