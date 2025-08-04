@@ -21,7 +21,7 @@ from SmoothingFunction import smooth
 from fipy.tools import numerix
 from joblib import Parallel, delayed
 import multiprocessing
-from material_maps import MATERIALS
+from material_maps import Semiconductors, Electrodes
 import copy
 
 q = 1.60217646e-19 # Elementary charge, in Coulombs
@@ -30,16 +30,20 @@ epsilon_0 = 8.85418782e-12
 TInfinite = 300.0
 D = k_B * TInfinite / q #=== kT in eV
 
-name_to_code = {mat.name: mat.code for mat in MATERIALS.values()}
+name_to_code_SC = {mat.name: mat.code for mat in Semiconductors.values()}
+name_to_code_EL = {mat.name: mat.code for mat in Electrodes.values()}
 
-Carbon_ID = name_to_code["Carbon"]
-PS_ID = name_to_code["PS"]
-TiO2_ID = name_to_code["mTiO2"]
-FTO_ID = name_to_code["FTO"]
-ZrO2_ID = name_to_code["ZrO2"]
+Carbon_ID = name_to_code_EL["Carbon"]
+PS_ID = name_to_code_SC["PS"]
+TiO2_ID = name_to_code_SC["mTiO2"]
+FTO_ID = name_to_code_EL["FTO"]
+ZrO2_ID = name_to_code_SC["ZrO2"]
 
-def map_material_property(devarray, prop):
-    return np.vectorize(lambda x: getattr(MATERIALS[x], prop))(devarray)
+def map_semiconductor_property(devarray, prop):
+    return np.vectorize(lambda x: getattr(Semiconductors[x], prop))(devarray)
+
+def map_electrode_property(devarray, prop):
+    return np.vectorize(lambda x: getattr(Electrodes[x], prop))(devarray)
 
 StretchFactor = 1 #Can help convergence if a finer mesh is needed
 SmoothFactor = 0.2 #Some smoothing helps with convergence
@@ -90,25 +94,25 @@ DeviceArchitechture = np.empty((1650, 1))
 DeviceArchitechture[0:1600,:] = PS_ID #1600nm PS Absorber
 DeviceArchitechture[1600:1650,:] = TiO2_ID #50nm TiO2 ETL
 
-GenRate_values_default = map_material_property(DeviceArchitechture, 'GenRate')
-epsilon_values = map_material_property(DeviceArchitechture, 'epsilon')
-pmob_values = map_material_property(DeviceArchitechture, 'pmob')
-nmob_values = map_material_property(DeviceArchitechture, 'nmob')
-Eg = map_material_property(DeviceArchitechture, 'Eg')
-Eg_PS = map_material_property(PS_ID, 'Eg')
-chi = map_material_property(DeviceArchitechture, 'chi')
-cation_mob_values = map_material_property(DeviceArchitechture, 'cationmob')
-anion_mob_values = map_material_property(DeviceArchitechture, 'anionmob')
-Recombination_Langevin_values = map_material_property(DeviceArchitechture, 'Recombination_Langevin')
-Recombination_Bimolecular_values = map_material_property(DeviceArchitechture, 'Recombination_Bimolecular')
-Nc = map_material_property(DeviceArchitechture, 'Nc')
-Nv = map_material_property(DeviceArchitechture, 'Nv')
-chi_a = map_material_property(DeviceArchitechture, 'Chi_a')
-chi_c = map_material_property(DeviceArchitechture, 'Chi_c')
-a_initial_values = map_material_property(DeviceArchitechture, 'a_initial_level')
-c_initial_values = map_material_property(DeviceArchitechture, 'c_initial_level')
-Nd_values = map_material_property(DeviceArchitechture, 'Nd')
-Na_values = map_material_property(DeviceArchitechture, 'Na')
+GenRate_values_default = map_semiconductor_property(DeviceArchitechture, 'GenRate')
+epsilon_values = map_semiconductor_property(DeviceArchitechture, 'epsilon')
+pmob_values = map_semiconductor_property(DeviceArchitechture, 'pmob')
+nmob_values = map_semiconductor_property(DeviceArchitechture, 'nmob')
+Eg = map_semiconductor_property(DeviceArchitechture, 'Eg')
+Eg_PS = map_semiconductor_property(PS_ID, 'Eg')
+chi = map_semiconductor_property(DeviceArchitechture, 'chi')
+cation_mob_values = map_semiconductor_property(DeviceArchitechture, 'cationmob')
+anion_mob_values = map_semiconductor_property(DeviceArchitechture, 'anionmob')
+Recombination_Langevin_values = map_semiconductor_property(DeviceArchitechture, 'Recombination_Langevin')
+Recombination_Bimolecular_values = map_semiconductor_property(DeviceArchitechture, 'Recombination_Bimolecular')
+Nc = map_semiconductor_property(DeviceArchitechture, 'Nc')
+Nv = map_semiconductor_property(DeviceArchitechture, 'Nv')
+chi_a = map_semiconductor_property(DeviceArchitechture, 'Chi_a')
+chi_c = map_semiconductor_property(DeviceArchitechture, 'Chi_c')
+a_initial_values = map_semiconductor_property(DeviceArchitechture, 'a_initial_level')
+c_initial_values = map_semiconductor_property(DeviceArchitechture, 'c_initial_level')
+Nd_values = map_semiconductor_property(DeviceArchitechture, 'Nd')
+Na_values = map_semiconductor_property(DeviceArchitechture, 'Na')
 
 EffectiveMediumApproximationVolumeFraction = 1.00
 
@@ -171,16 +175,16 @@ SRH_Interfacial_Recombination_Zone = LocationETL_Exact
 print("Number of ETL interface nm: ", 1.00e9*dx*(np.count_nonzero(LocationETL_Exact)-1)/(nx))
 #print("Number of HTL interface nm: ", 1.00e9*dx*(np.count_nonzero(LocationHTL_Exact)-1)/(nx)) NO HTL in this simulation!
 
-SRH_Bulk_Recombination_Zone = map_material_property(DeviceArchitechture, 'GenRate') - SRH_Interfacial_Recombination_Zone
+SRH_Bulk_Recombination_Zone = map_semiconductor_property(DeviceArchitechture, 'GenRate') - SRH_Interfacial_Recombination_Zone
 #Make negative values zero
 SRH_Bulk_Recombination_Zone = np.where(SRH_Bulk_Recombination_Zone < 0, 0.00, SRH_Bulk_Recombination_Zone)
 
 #Here we define the Ohmic boundary conditions
-nFTO = map_material_property(TiO2_ID, 'Nc') * np.exp(((map_material_property(TiO2_ID, 'chi') - map_material_property(FTO_ID, "WF")) / D))
-nCarbon = map_material_property(PS_ID, 'Nc') * np.exp(((map_material_property(PS_ID, 'chi') - map_material_property(Carbon_ID, "WF")) / D))
+nFTO = map_semiconductor_property(TiO2_ID, 'Nc') * np.exp(((map_semiconductor_property(TiO2_ID, 'chi') - map_electrode_property(FTO_ID, "WF")) / D))
+nCarbon = map_semiconductor_property(PS_ID, 'Nc') * np.exp(((map_semiconductor_property(PS_ID, 'chi') - map_electrode_property(Carbon_ID, "WF")) / D))
 
-pCarbon = map_material_property(PS_ID, 'Nv') * np.exp(((map_material_property(Carbon_ID, "WF") - (map_material_property(PS_ID, "chi") +map_material_property(PS_ID, "Eg"))) / D))
-pFTO = map_material_property(TiO2_ID, 'Nv') * np.exp(((map_material_property(FTO_ID, "WF") - (map_material_property(TiO2_ID, "chi") +map_material_property(TiO2_ID, "Eg"))) / D))
+pCarbon = map_semiconductor_property(PS_ID, 'Nv') * np.exp(((map_electrode_property(Carbon_ID, "WF") - (map_semiconductor_property(PS_ID, "chi") +map_semiconductor_property(PS_ID, "Eg"))) / D))
+pFTO = map_semiconductor_property(TiO2_ID, 'Nv') * np.exp(((map_electrode_property(FTO_ID, "WF") - (map_semiconductor_property(TiO2_ID, "chi") +map_semiconductor_property(TiO2_ID, "Eg"))) / D))
 
 ############Recombination Constants############
 #Charge Carrier Lifetimes in the bulk (s)
@@ -190,16 +194,16 @@ tau_n_bulk = 5 * 1.00e-9
 tau_p_interface = 0.02 * 1.00e-9
 tau_n_interface = 0.02 * 1.00e-9
 
-Etrap = map_material_property(PS_ID, "chi") + map_material_property(PS_ID, "Eg")/2 #Mid-bandgap trap energy level in eV
-Etrap_interface = map_material_property(TiO2_ID, "chi") + ((map_material_property(PS_ID, "chi") + map_material_property(PS_ID, "Eg"))-map_material_property(TiO2_ID, 'chi'))/2
+Etrap = map_semiconductor_property(PS_ID, "chi") + map_semiconductor_property(PS_ID, "Eg")/2 #Mid-bandgap trap energy level in eV
+Etrap_interface = map_semiconductor_property(TiO2_ID, "chi") + ((map_semiconductor_property(PS_ID, "chi") + map_semiconductor_property(PS_ID, "Eg"))-map_semiconductor_property(TiO2_ID, 'chi'))/2
 
 #Here we define the mid-bandgap SRH trap energy level
-n_hat = map_material_property(PS_ID, 'Nc') * np.exp((map_material_property(PS_ID, "chi") - Etrap) / D)
-p_hat = map_material_property(PS_ID, 'Nv') * np.exp((Etrap - map_material_property(PS_ID, "chi") - map_material_property(PS_ID, "Eg")) / D)
+n_hat = map_semiconductor_property(PS_ID, 'Nc') * np.exp((map_semiconductor_property(PS_ID, "chi") - Etrap) / D)
+p_hat = map_semiconductor_property(PS_ID, 'Nv') * np.exp((Etrap - map_semiconductor_property(PS_ID, "chi") - map_semiconductor_property(PS_ID, "Eg")) / D)
 
 #Here we define the mixed band PS-HOMO/TiO2-LUMO SRH trap level
-n_hat_mixed = map_material_property(PS_ID, 'Nc') * np.exp((map_material_property(TiO2_ID, "chi") - Etrap_interface) / D)
-p_hat_mixed = map_material_property(PS_ID, 'Nv') * np.exp((Etrap_interface - map_material_property(PS_ID, "chi") - map_material_property(PS_ID, "Eg")) / D)
+n_hat_mixed = map_semiconductor_property(PS_ID, 'Nc') * np.exp((map_semiconductor_property(TiO2_ID, "chi") - Etrap_interface) / D)
+p_hat_mixed = map_semiconductor_property(PS_ID, 'Nv') * np.exp((Etrap_interface - map_semiconductor_property(PS_ID, "chi") - map_semiconductor_property(PS_ID, "Eg")) / D)
 
 niPS = np.sqrt(Nc * Nv * np.exp(-Eg / D))
 
@@ -287,8 +291,8 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     NaCell = CellVariable(name="Fixed Ionised Acceptor", mesh=mesh, value=0.00)
     NaCell.setValue(Na_values.flatten())
 
-    phih = map_material_property(Carbon_ID, "WF")
-    phin = map_material_property(FTO_ID, "WF")
+    phih = map_electrode_property(Carbon_ID, "WF")
+    phin = map_electrode_property(FTO_ID, "WF")
     Vbi = (phih - phin)
 
     philocal.constrain(0.00, where=FTOContactLocation)

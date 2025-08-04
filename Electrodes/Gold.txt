@@ -1,0 +1,2 @@
+name: Gold
+WF: 5.00
