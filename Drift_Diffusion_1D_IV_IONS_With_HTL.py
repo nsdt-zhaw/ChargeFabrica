@@ -279,7 +279,6 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     ChiCell_c.setValue(chi_c.flatten())
     EgCell = CellVariable(name="Band Gap", mesh=mesh, value=0.00)
     EgCell.setValue(Eg.flatten())
-    ZerosCellVariable = CellVariable(name="Zeros", mesh=mesh, value=0.00)
 
     NdCell = CellVariable(name="Fixed Ionised Donors", mesh=mesh, value=0.00)
     NdCell.setValue(Nd_values.flatten())
