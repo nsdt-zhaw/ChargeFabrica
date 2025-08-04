@@ -1,5 +1,4 @@
 name: mTiO2_2
-code: 2857092578620975
 GenRate: 0.00
 epsilon: 4.25
 pmob: 1.00e-7

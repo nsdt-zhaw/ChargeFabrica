@@ -1,5 +1,4 @@
 name: ZrO2
-code: 225
 GenRate: 0.00
 epsilon: 35
 pmob: 1.00e-7

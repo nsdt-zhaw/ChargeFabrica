@@ -1,5 +1,4 @@
 name: Carbon
-code: 0
 GenRate: 0.00
 epsilon: 1000.0
 pmob: 1.00e-4

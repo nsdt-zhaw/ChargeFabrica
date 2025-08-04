@@ -1,5 +1,4 @@
 name: mTiO2
-code: 150
 GenRate: 0.00
 epsilon: 35
 pmob: 1.00e-6

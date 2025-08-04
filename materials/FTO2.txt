@@ -1,5 +1,4 @@
 name: FTO2
-code: 248762749
 GenRate: 0.00
 epsilon: 1000.0
 pmob: 1.00e-4
