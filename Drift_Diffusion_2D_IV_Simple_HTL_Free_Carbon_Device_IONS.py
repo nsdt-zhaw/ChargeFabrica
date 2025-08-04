@@ -138,32 +138,31 @@ DeviceArchitechture[0:100,:] = PS_ID
 DeviceArchitechture[100:MesoLength+100,:] = SinusoidalArray
 DeviceArchitechture[(MesoLength+100):(MesoLength + 150),:] = TiO2_ID
 
-GenRate_values_default = map_semiconductor_property(DeviceArchitechture, 'GenRate')
-epsilon_values = map_semiconductor_property(DeviceArchitechture, 'epsilon')
-pmob_values = map_semiconductor_property(DeviceArchitechture, 'pmob')
-nmob_values = map_semiconductor_property(DeviceArchitechture, 'nmob')
-Eg = map_semiconductor_property(DeviceArchitechture, 'Eg')
-Eg_PS = map_semiconductor_property(PS_ID, 'Eg')
-chi = map_semiconductor_property(DeviceArchitechture, 'chi')
-cation_mob_values = map_semiconductor_property(DeviceArchitechture, 'cationmob')
-anion_mob_values = map_semiconductor_property(DeviceArchitechture, 'anionmob')
+GenRate_values_default = map_semiconductor_property(DeviceArchitechture, 'GenRate') #Binary array for whether generation is enabled or not
+epsilon_values = map_semiconductor_property(DeviceArchitechture, 'epsilon') #Dielectric constant (Unitless)
+pmob_values = map_semiconductor_property(DeviceArchitechture, 'pmob') #Hole Mobility (m^2/Vs)
+nmob_values = map_semiconductor_property(DeviceArchitechture, 'nmob') #Electron Mobility (m^2/Vs)
+Eg = map_semiconductor_property(DeviceArchitechture, 'Eg') #Band Gap (eV)
+chi = map_semiconductor_property(DeviceArchitechture, 'chi') #Electron Affinity (eV)
+cation_mob_values = map_semiconductor_property(DeviceArchitechture, 'cationmob') #Cation Mobility (m^2/Vs)
+anion_mob_values = map_semiconductor_property(DeviceArchitechture, 'anionmob') #Anion Mobility (m^2/Vs)
 Recombination_Langevin_values = map_semiconductor_property(DeviceArchitechture, 'Recombination_Langevin')
-Recombination_Bimolecular_values = map_semiconductor_property(DeviceArchitechture, 'Recombination_Bimolecular')
-Nc = map_semiconductor_property(DeviceArchitechture, 'Nc')
-Nv = map_semiconductor_property(DeviceArchitechture, 'Nv')
-chi_a = map_semiconductor_property(DeviceArchitechture, 'Chi_a')
-chi_c = map_semiconductor_property(DeviceArchitechture, 'Chi_c')
-a_initial_values = map_semiconductor_property(DeviceArchitechture, 'a_initial_level')
-c_initial_values = map_semiconductor_property(DeviceArchitechture, 'c_initial_level')
-Nd_values = map_semiconductor_property(DeviceArchitechture, 'Nd')
-Na_values = map_semiconductor_property(DeviceArchitechture, 'Na')
+Recombination_Bimolecular_values = map_semiconductor_property(DeviceArchitechture, 'Recombination_Bimolecular') #Bimolecular Recombination Prefactor (m^3/s)
+Nc = map_semiconductor_property(DeviceArchitechture, 'Nc') #Effective Density of States in the Conduction Band (1/m^3)
+Nv = map_semiconductor_property(DeviceArchitechture, 'Nv') #Effective Density of States in the Valence Band (1/m^3)
+chi_a = map_semiconductor_property(DeviceArchitechture, 'Chi_a') #(Untested!) mobile anion Band Offset
+chi_c = map_semiconductor_property(DeviceArchitechture, 'Chi_c') #(Untested!) mobile cation Band Offset
+a_initial_values = map_semiconductor_property(DeviceArchitechture, 'a_initial_level') #mobile anion concentration (1/m^3)
+c_initial_values = map_semiconductor_property(DeviceArchitechture, 'c_initial_level') #mobile cation concentration (1/m^3)
+Nd_values = map_semiconductor_property(DeviceArchitechture, 'Nd') #Ionised Dopant Density (1/m^3)
+Na_values = map_semiconductor_property(DeviceArchitechture, 'Na') #Ionised Acceptor Density (1/m^3)
 
 EffectiveMediumApproximationVolumeFraction = 1.00
 
 GenMode = 1
 if GenMode == 1:
     #Lambert-Beer Law
-    GenRate_values_default, ThermalisationHeat, PhotonFluxArray, TransmittedEnergy = calculate_absorption_above_bandgap(SolarSpectrumWavelength, SolarSpectrumIrradiance, AbsorptionData[:, 0], alphadata * EffectiveMediumApproximationVolumeFraction,GenRate_values_default, dx*StretchFactor, Eg_PS)
+    GenRate_values_default, ThermalisationHeat, PhotonFluxArray, TransmittedEnergy = calculate_absorption_above_bandgap(SolarSpectrumWavelength, SolarSpectrumIrradiance, AbsorptionData[:, 0], alphadata * EffectiveMediumApproximationVolumeFraction,GenRate_values_default, dx*StretchFactor, map_semiconductor_property(PS_ID, "Eg"))
 else:
     #Constant Generation Rate
     GenRate_values_default = GenRate_values_default * 2.20e27
@@ -227,8 +226,8 @@ SRH_Bulk_Recombination_Zone = np.where(SRH_Bulk_Recombination_Zone < 0, 0.00, SR
 nFTO = map_semiconductor_property(TiO2_ID, 'Nc') * np.exp(((map_semiconductor_property(TiO2_ID, 'chi') - map_electrode_property(FTO_ID, "WF")) / D))
 nCarbon = map_semiconductor_property(PS_ID, 'Nc') * np.exp(((map_semiconductor_property(PS_ID, 'chi') - map_electrode_property(Carbon_ID, "WF")) / D))
 
-pCarbon = map_semiconductor_property(PS_ID, 'Nv') * np.exp(((map_electrode_property(Carbon_ID, "WF") - (map_semiconductor_property(PS_ID, "chi") +map_semiconductor_property(PS_ID, "Eg"))) / D))
-pFTO = map_semiconductor_property(TiO2_ID, 'Nv') * np.exp(((map_electrode_property(FTO_ID, "WF") - (map_semiconductor_property(TiO2_ID, "chi") +map_semiconductor_property(TiO2_ID, "Eg"))) / D))
+pCarbon = map_semiconductor_property(PS_ID, 'Nv') * np.exp(((map_electrode_property(Carbon_ID, "WF") - (map_semiconductor_property(PS_ID, "chi") + map_semiconductor_property(PS_ID, "Eg"))) / D))
+pFTO = map_semiconductor_property(TiO2_ID, 'Nv') * np.exp(((map_electrode_property(FTO_ID, "WF") - (map_semiconductor_property(TiO2_ID, "chi") + map_semiconductor_property(TiO2_ID, "Eg"))) / D))
 
 ############Recombination Constants############
 #Charge Carrier Lifetimes in the bulk (s)
@@ -251,7 +250,7 @@ p_hat_mixed = map_semiconductor_property(PS_ID, 'Nv') * np.exp((Etrap_interface 
 
 niPS = np.sqrt(Nc * Nv * np.exp(-Eg / D))
 
-def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nCarbon, pFTO, pCarbon , GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, Eg_PS, niPS, Nd_values, Na_values):
+def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nCarbon, pFTO, pCarbon , GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, niPS, Nd_values, Na_values):
 
     #solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1) #Works out of the box with simple fipy installation, but slower than pysparse
     solver = fipy.solvers.pysparse.linearLUSolver.LinearLUSolver(precon=None, iterations=1) #Very fast solver
@@ -512,7 +511,7 @@ def simulate_device(output_dir, additional_voltages=None, GenRate_values_default
         chunk_voltages = applied_voltages[start:start + chunk_size]
 
         # Parallel computation within the chunk
-        chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(delayed(solve_for_voltage)(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nCarbon, pFTO, pCarbon, GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, Eg_PS, niPS, Nd_values, Na_values) for voltage in chunk_voltages)
+        chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(delayed(solve_for_voltage)(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nCarbon, pFTO, pCarbon, GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, niPS, Nd_values, Na_values) for voltage in chunk_voltages)
 
         #DeepCopy To avoid overwriting the results in next loop
         copied_result = [copy.deepcopy(r) for r in chunk_results]
