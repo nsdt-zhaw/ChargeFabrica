@@ -31,7 +31,6 @@ Carbon_ID = name_to_code_EL["Carbon"]
 PS_ID = name_to_code_SC["PS"]
 TiO2_ID = name_to_code_SC["mTiO2"]
 FTO_ID = name_to_code_EL["FTO"]
-ZrO2_ID = name_to_code_SC["ZrO2"]
 
 def map_semiconductor_property(devarray, prop):
     return np.vectorize(lambda x: getattr(Semiconductors[x], prop))(devarray)
