@@ -4,21 +4,15 @@
 import os
 os.environ["OMP_NUM_THREADS"] = "1" #Really important! Pysparse doesnt benefit from multithreading.
 import numpy as np
-import matplotlib
-if os.name == 'nt':
-    print("Windows")
-else:
-    matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 from mark_interface_file import mark_interfaces, mark_interfaces_mixed
 from calculate_absorption import calculate_absorption_above_bandgap
-from fipy import CellVariable, TransientTerm, DiffusionTerm, ExponentialConvectionTerm
-import time
+from fipy import CellVariable, TransientTerm, DiffusionTerm, ExponentialConvectionTerm, Variable
 import fipy
-import pandas as pd
-import cv2 as cv
-from SmoothingFunction import smooth
 from fipy.tools import numerix
+import time
+import pandas as pd
+from scipy.ndimage import zoom
+from SmoothingFunction import flatten_and_smooth_all
 from joblib import Parallel, delayed
 import multiprocessing
 from material_maps import Semiconductors, Electrodes
@@ -51,38 +45,11 @@ SmoothFactor = 0.2 #Some smoothing helps with convergence
 dx = 1.00e-9/StretchFactor #Pixel Width in meters
 dy = 1.00e-9/StretchFactor #Pixel Width in meters
 
-# Extract current file name
-current_file = os.path.basename(__file__)[0:-3]
-print("Current file name", current_file)
-
-# Read the Excel file and skip the first two rows
 data = pd.read_excel('./Solar_Spectrum.xls', skiprows=2)
-
-SolarSpectrumWavelength = data.iloc[:, 0] #Units are nm
-SolarSpectrumIrradiance = data.iloc[:, 2] #Units are W/(m2*nm)
-
-# Round wavelengths to nearest integer
-rounded_wavelengths = np.round(SolarSpectrumWavelength).astype(int)
-
-# Get the indices to sort the rounded wavelengths
-sorted_indices = np.argsort(rounded_wavelengths)
-
-# Sort both wavelengths and irradiances, so they are aligned
-sorted_wavelengths = rounded_wavelengths[sorted_indices]
-sorted_irradiances = SolarSpectrumIrradiance[sorted_indices]
-
-# Sum the irradiance for each unique rounded wavelength to get the average
-unique_wavelengths, inverse_indices = np.unique(sorted_wavelengths, return_inverse=True)
-
-# Initialize the array for average irradiances
-averaged_irradiances = np.zeros_like(unique_wavelengths, dtype=float)
-
-# Sum the irradiance values for each unique wavelength
-for i, wavelength in enumerate(unique_wavelengths):
-    averaged_irradiances[i] = np.mean(sorted_irradiances[inverse_indices == i])
-
-SolarSpectrumWavelength = unique_wavelengths
-SolarSpectrumIrradiance = averaged_irradiances
+data['RoundedWavelength'] = data.iloc[:,0].round().astype(int)
+grouped = data.groupby('RoundedWavelength').mean()
+SolarSpectrumWavelength = grouped.index.values
+SolarSpectrumIrradiance = grouped.iloc[:, 2].values
 
 #Importing Absorbance Coefficient Spectrum for MAPbI3
 AbsorptionData = np.genfromtxt("MAPI_tailfit_nk 1.txt", delimiter=",", skip_header=1)
@@ -95,7 +62,30 @@ DeviceArchitechture[0:50,:] = Spiro_ID #50 nm Spiro HTL
 DeviceArchitechture[50:450,:] = PS_ID #400nm PS Absorber
 DeviceArchitechture[450:500,:] = TiO2_ID #50nm TiO2 ETL
 
+TopElectrode = FTO_ID
+TopLocationSC = DeviceArchitechture[-1,0] #Semiconducting material adjacent to the top electrode
+BottomLocationSC = DeviceArchitechture[0,0] #Semiconducting material adjacent to the bottom electrode
+BottomElectrode = Gold_ID
+
+EffectiveMediumApproximationVolumeFraction = 1.00
 GenRate_values_default = map_semiconductor_property(DeviceArchitechture, 'GenRate') #Binary array for whether generation is enabled or not
+
+GenMode = 1
+if GenMode == 1:
+    #Lambert-Beer Law
+    GenRate_values_default, ThermalisationHeat, PhotonFluxArray, TransmittedEnergy = calculate_absorption_above_bandgap(SolarSpectrumWavelength, SolarSpectrumIrradiance, AbsorptionData[:, 0], alphadata * EffectiveMediumApproximationVolumeFraction,GenRate_values_default, dx*StretchFactor, map_semiconductor_property(PS_ID, "Eg"))
+else:
+    #Constant Generation Rate
+    GenRate_values_default = GenRate_values_default * 2.20e27
+
+#Stretching in case finer meshing is needed (Stretching of generation array is done afterwards since the 3D hyperspectral generation array may exhaust RAM on machine)
+if DeviceArchitechture.shape[1] == 1:
+    DeviceArchitechture = zoom(DeviceArchitechture, [StretchFactor, 1], order=0)
+    GenRate_values_default = zoom(GenRate_values_default, [StretchFactor, 1], order=0)
+else:
+    DeviceArchitechture = zoom(DeviceArchitechture, [StretchFactor, StretchFactor], order=0)
+    GenRate_values_default = zoom(GenRate_values_default, [StretchFactor, StretchFactor], order=0)
+
 epsilon_values = map_semiconductor_property(DeviceArchitechture, 'epsilon') #Dielectric constant (Unitless)
 pmob_values = map_semiconductor_property(DeviceArchitechture, 'pmob') #Hole Mobility (m^2/Vs)
 nmob_values = map_semiconductor_property(DeviceArchitechture, 'nmob') #Electron Mobility (m^2/Vs)
@@ -114,53 +104,9 @@ c_initial_values = map_semiconductor_property(DeviceArchitechture, 'c_initial_le
 Nd_values = map_semiconductor_property(DeviceArchitechture, 'Nd') #Ionised Dopant Density (1/m^3)
 Na_values = map_semiconductor_property(DeviceArchitechture, 'Na') #Ionised Acceptor Density (1/m^3)
 
-EffectiveMediumApproximationVolumeFraction = 1.00
-
-GenMode = 1
-if GenMode == 1:
-    #Lambert-Beer Law
-    GenRate_values_default, ThermalisationHeat, PhotonFluxArray, TransmittedEnergy = calculate_absorption_above_bandgap(SolarSpectrumWavelength, SolarSpectrumIrradiance, AbsorptionData[:, 0], alphadata * EffectiveMediumApproximationVolumeFraction,GenRate_values_default, dx*StretchFactor, map_semiconductor_property(PS_ID, "Eg"))
-else:
-    #Constant Generation Rate
-    GenRate_values_default = GenRate_values_default * 2.20e27
-    ThermalisationHeat = np.zeros_like(GenRate_values_default)
-    PhotonFluxArray = np.zeros_like(GenRate_values_default)
-    TransmittedEnergy = np.zeros_like(GenRate_values_default)
-
-#Stretching in case finer meshing is needed (Stretching of generation array is done afterwards since the 3D hyperspectral generation array may exhaust RAM on machine)
-if DeviceArchitechture.shape[1] == 1:
-    DeviceArchitechture = cv.resize(DeviceArchitechture, None, fx=1.0, fy=StretchFactor, interpolation=cv.INTER_NEAREST)
-    GenRate_values_default = cv.resize(GenRate_values_default, None, fx=1.0, fy=StretchFactor, interpolation=cv.INTER_NEAREST)
-    PhotonFluxArray = cv.resize(PhotonFluxArray, None, fx=1.0, fy=StretchFactor, interpolation=cv.INTER_NEAREST)
-else:
-    DeviceArchitechture = cv.resize(DeviceArchitechture, None, fx=StretchFactor, fy=StretchFactor, interpolation=cv.INTER_NEAREST)
-    GenRate_values_default = cv.resize(GenRate_values_default, None, fx=StretchFactor, fy=StretchFactor, interpolation=cv.INTER_NEAREST)
-    PhotonFluxArray = cv.resize(PhotonFluxArray, None, fx=StretchFactor, fy=StretchFactor, interpolation=cv.INTER_NEAREST)
-
-def flatten_smooth(arr, smoothF):
-    if smoothF > 0.0:
-        arr = smooth(arr, smoothF)
-    return arr.flatten()
-
 print(DeviceArchitechture.shape)
 
-nx = DeviceArchitechture.shape[1]
-ny = DeviceArchitechture.shape[0]
-
-#Smoothen Variables to improve numerical stability
-epsilon_values = flatten_smooth(epsilon_values, SmoothFactor*StretchFactor)
-pmob_values = flatten_smooth(pmob_values, SmoothFactor*StretchFactor)
-nmob_values = flatten_smooth(nmob_values, SmoothFactor*StretchFactor)
-chi = flatten_smooth(chi, SmoothFactor*StretchFactor)
-chi_a = flatten_smooth(chi_a, SmoothFactor*StretchFactor)
-chi_c = flatten_smooth(chi_c, SmoothFactor*StretchFactor)
-LogNc = np.log(Nc)
-Nc = flatten_smooth(Nc, SmoothFactor*StretchFactor)
-LogNc = flatten_smooth(LogNc, SmoothFactor*StretchFactor)
-LogNv = np.log(Nv)
-Nv = flatten_smooth(Nv, SmoothFactor*StretchFactor)
-LogNv = flatten_smooth(LogNv, SmoothFactor*StretchFactor)
-Eg = flatten_smooth(Eg, SmoothFactor*StretchFactor)
+ny, nx = DeviceArchitechture.shape
 
 #LocationSRH_HTL = mark_interfaces(DeviceArchitechture, 50, PS_ID)
 #mark_interfaces() places the interface inside the absorber
@@ -179,12 +125,50 @@ SRH_Bulk_Recombination_Zone = map_semiconductor_property(DeviceArchitechture, 'G
 #Make negative values zero
 SRH_Bulk_Recombination_Zone = np.where(SRH_Bulk_Recombination_Zone < 0, 0.00, SRH_Bulk_Recombination_Zone)
 
-#Here we define the Ohmic boundary conditions
-nFTO = map_semiconductor_property(TiO2_ID, 'Nc') * np.exp(((map_semiconductor_property(TiO2_ID, 'chi') - map_electrode_property(FTO_ID, "WF")) / D))
-nGold = map_semiconductor_property(Spiro_ID, 'Nc') * np.exp(((map_semiconductor_property(Spiro_ID, 'chi') - map_electrode_property(Gold_ID, "WF")) / D))
+#Flatten and smoothen variables to improve numerical stability
+(epsilon_values, pmob_values, nmob_values, chi, chi_a, chi_c,Nc, LogNc, Nv, LogNv, Eg, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone) = flatten_and_smooth_all([epsilon_values, pmob_values, nmob_values, chi, chi_a, chi_c,Nc, np.log(Nc), Nv, np.log(Nv), Eg, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone],SmoothFactor * StretchFactor)
+(GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, anion_mob_values, cation_mob_values, Nd_values, Na_values) = flatten_and_smooth_all([GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, anion_mob_values, cation_mob_values, Nd_values, Na_values],0.00)
 
-pGold = map_semiconductor_property(Spiro_ID, 'Nv') * np.exp(((map_electrode_property(Gold_ID, "WF") - (map_semiconductor_property(Spiro_ID, "chi") + map_semiconductor_property(Spiro_ID, "Eg"))) / D))
-pFTO = map_semiconductor_property(TiO2_ID, 'Nv') * np.exp(((map_electrode_property(FTO_ID, "WF") - (map_semiconductor_property(TiO2_ID, "chi") + map_semiconductor_property(TiO2_ID, "Eg"))) / D))
+mesh = fipy.Grid2D(dx=dx, dy=dy, nx=nx, ny=ny)
+
+gen_rate = CellVariable(name="Generation Rate", mesh=mesh, value=GenRate_values_default)
+Recombination_Langevin_Cell = CellVariable(name="Recombination_Langevin_Cell", mesh=mesh, value=Recombination_Langevin_values)
+Recombination_Bimolecular_Cell = CellVariable(name="Recombination_Bimolecular_Cell", mesh=mesh, value=Recombination_Bimolecular_values)
+Recombination_Interfacial_SRH_Cell = CellVariable(name="Recombination_SRH_Cell", mesh=mesh, value=SRH_Interfacial_Recombination_Zone)
+Recombination_Bulk_SRH_Cell = CellVariable(name="Recombination_SRH_Cell", mesh=mesh, value=SRH_Bulk_Recombination_Zone)
+
+nmob = CellVariable(name="electron mobility", mesh=mesh, value=nmob_values)
+pmob = CellVariable(name="hole mobility", mesh=mesh, value=pmob_values)
+anionmob = CellVariable(name="anion mobility", mesh=mesh, value=anion_mob_values)
+cationmob = CellVariable(name="cation mobility", mesh=mesh, value=cation_mob_values)
+
+epsilon = CellVariable(name="dielectric permittivity", mesh=mesh, value=epsilon_values)
+LogNcCell = CellVariable(name="Log Effective Density of States CB", mesh=mesh, value=LogNc)
+LogNvCell = CellVariable(name="Log Effective Density of States VB", mesh=mesh, value=LogNv)
+
+ChiCell = CellVariable(name="Electron Affinity", mesh=mesh, value=chi)
+ChiCell_a = CellVariable(name="Electron Affinity", mesh=mesh, value=chi_a)
+ChiCell_c = CellVariable(name="Electron Affinity", mesh=mesh, value=chi_c)
+EgCell = CellVariable(name="Band Gap", mesh=mesh, value=Eg)
+
+NdCell = CellVariable(name="Fixed Ionised Donors", mesh=mesh, value=Nd_values)
+NaCell = CellVariable(name="Fixed Ionised Acceptor", mesh=mesh, value=Na_values)
+
+#Here we define the Ohmic boundary conditions
+nTop = map_semiconductor_property(TopLocationSC, 'Nc') * np.exp(((map_semiconductor_property(TopLocationSC, 'chi') - map_electrode_property(TopElectrode, "WF")) / D))
+pTop = map_semiconductor_property(TopLocationSC, 'Nv') * np.exp(((map_electrode_property(TopElectrode, "WF") - (map_semiconductor_property(TopLocationSC, "chi") + map_semiconductor_property(TopLocationSC, "Eg"))) / D))
+
+nBottom = map_semiconductor_property(BottomLocationSC, 'Nc') * np.exp(((map_semiconductor_property(BottomLocationSC, 'chi') - map_electrode_property(BottomElectrode, "WF")) / D))
+pBottom = map_semiconductor_property(BottomLocationSC, 'Nv') * np.exp(((map_electrode_property(BottomElectrode, "WF") - (map_semiconductor_property(BottomLocationSC, "chi") +map_semiconductor_property(BottomLocationSC, "Eg"))) / D))
+
+Va = Variable(name="Applied Voltage", value=0.00) #This variable will be used to set the voltage across the device
+
+Vbi = (map_electrode_property(BottomElectrode, "WF") - map_electrode_property(TopElectrode, "WF"))
+
+contact_bcs = [
+    {'boundary': mesh.facesTop,    'n': nTop, 'p': pTop, 'phi': 0},
+    {'boundary': mesh.facesBottom, 'n': nBottom, 'p': pBottom, 'phi': -(Vbi - Va) }
+]
 
 ############Recombination Constants############
 #Charge Carrier Lifetimes in the bulk (s)
@@ -207,96 +191,23 @@ p_hat_mixed = map_semiconductor_property(PS_ID, 'Nv') * np.exp((Etrap_interface 
 
 niPS = np.sqrt(Nc * Nv * np.exp(-Eg / D))
 
-def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nGold, pFTO, pGold , GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, niPS, Nd_values, Na_values):
+def solve_for_voltage(voltage, nx, ny, D, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, niPS, Nd_values, Na_values):
 
     #solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1) #Works out of the box with simple fipy installation, but slower than pysparse
     solver = fipy.solvers.pysparse.linearLUSolver.LinearLUSolver(precon=None, iterations=1) #Very fast solver
 
-    mesh = fipy.Grid2D(dx=dx, dy=dy, nx=nx, ny=ny)
-    GoldContactLocation = mesh.facesBottom
-    FTOContactLocation = mesh.facesTop
+    philocal = CellVariable(name="electrostatic potential", mesh=mesh, value=phi_values, hasOld=True)
+    nlocal = CellVariable(name="electron density", mesh=mesh, value=n_values, hasOld=True)
+    plocal = CellVariable(name="hole density", mesh=mesh, value=p_values, hasOld=True)
+    alocal = CellVariable(name="anion density", mesh=mesh, value=a_values)
+    clocal = CellVariable(name="cation density", mesh=mesh, value=c_values)
 
-    gen_rate = CellVariable(name="generation minus recombination rate", mesh=mesh, value=0.00)
-    GenRate_values_default = GenRate_values_default.flatten()
-    gen_rate.setValue(GenRate_values_default)
+    Va.setValue(voltage)
 
-    Recombination_Langevin_Cell = CellVariable(name="Recombination_Langevin_Cell", mesh=mesh, value=0.00)
-    Recombination_Langevin_values = Recombination_Langevin_values.flatten()
-    Recombination_Langevin_Cell.setValue(Recombination_Langevin_values)
-
-    Recombination_Bimolecular_Cell = CellVariable(name="Recombination_Bimolecular_Cell", mesh=mesh, value=0.00)
-    Recombination_Bimolecular_values = Recombination_Bimolecular_values.flatten()
-    Recombination_Bimolecular_Cell.setValue(Recombination_Bimolecular_values)
-
-    Recombination_Interfacial_SRH_Cell = CellVariable(name="Recombination_SRH_Cell", mesh=mesh, value=0.00)
-    SRH_Interfacial_Recombination_Zone = flatten_smooth(SRH_Interfacial_Recombination_Zone, SmoothFactor * StretchFactor)
-    Recombination_Interfacial_SRH_Cell.setValue(SRH_Interfacial_Recombination_Zone)
-
-    Recombination_Bulk_SRH_Cell = CellVariable(name="Recombination_SRH_Cell", mesh=mesh, value=0.00)
-    SRH_Bulk_Recombination_Zone = flatten_smooth(SRH_Bulk_Recombination_Zone, SmoothFactor * StretchFactor)
-    Recombination_Bulk_SRH_Cell.setValue(SRH_Bulk_Recombination_Zone)
-
-    anionmob = CellVariable(name="anion mobility", mesh=mesh, value=0.00)
-    cationmob = CellVariable(name="cation mobility", mesh=mesh, value=0.00)
-    anion_mob_values = anion_mob_values.flatten()
-    cation_mob_values = cation_mob_values.flatten()
-    anionmob.setValue(anion_mob_values)
-    cationmob.setValue(cation_mob_values)
-
-    pmob = CellVariable(name="hole mobility", mesh=mesh, value=0.00)
-    nmob = CellVariable(name="electron mobility", mesh=mesh, value=0.00)
-    pmob.setValue(pmob_values)
-    nmob.setValue(nmob_values)
-
-    epsilon = CellVariable(name="dielectric permittivity", mesh=mesh, value=0.00)
-    epsilon.setValue(epsilon_values)
-
-    NcCell = CellVariable(name="Effective Density of States CB", mesh=mesh, value=0.00)
-    NcCell.setValue(Nc.flatten())
-    NvCell = CellVariable(name="Effective Density of States VB", mesh=mesh, value=0.00)
-    NvCell.setValue(Nv.flatten())
-    LogNcCell = CellVariable(name="Log Effective Density of States CB", mesh=mesh, value=0.00)
-    LogNcCell.setValue(LogNc)
-    LogNvCell = CellVariable(name="Log Effective Density of States VB", mesh=mesh, value=0.00)
-    LogNvCell.setValue(LogNv)
-    philocal = CellVariable(name="solution variable", mesh=mesh, value=0.00, hasOld=True)
-    philocal.setValue(phi_values)
-    nlocal = CellVariable(name="electron density", mesh=mesh, value=niPS, hasOld=True)
-    plocal = CellVariable(name="hole density", mesh=mesh, value=niPS, hasOld=True)
-    nlocal.setValue(n_values)
-    plocal.setValue(p_values)
-
-    alocal = CellVariable(name="anion density", mesh=mesh, value=0.00)
-    alocal.setValue(a_values)
-
-    clocal = CellVariable(name="cation density", mesh=mesh, value=0.00)
-    clocal.setValue(c_values)
-
-    nlocal.constrain(nFTO, where=FTOContactLocation)
-    nlocal.constrain(nGold, where=GoldContactLocation)
-    plocal.constrain(pFTO, where=FTOContactLocation)
-    plocal.constrain(pGold, where=GoldContactLocation)
-
-    ChiCell = CellVariable(name="Electron Affinity", mesh=mesh, value=0.00)
-    ChiCell.setValue(chi.flatten())
-    ChiCell_a = CellVariable(name="Electron Affinity", mesh=mesh, value=0.00)
-    ChiCell_a.setValue(chi_a.flatten())
-    ChiCell_c = CellVariable(name="Electron Affinity", mesh=mesh, value=0.00)
-    ChiCell_c.setValue(chi_c.flatten())
-    EgCell = CellVariable(name="Band Gap", mesh=mesh, value=0.00)
-    EgCell.setValue(Eg.flatten())
-
-    NdCell = CellVariable(name="Fixed Ionised Donors", mesh=mesh, value=0.00)
-    NdCell.setValue(Nd_values.flatten())
-    NaCell = CellVariable(name="Fixed Ionised Acceptor", mesh=mesh, value=0.00)
-    NaCell.setValue(Na_values.flatten())
-
-    phih = map_electrode_property(Gold_ID, "WF")
-    phin = map_electrode_property(FTO_ID, "WF")
-    Vbi = (phih - phin)
-
-    philocal.constrain(0.00, where = FTOContactLocation)
-    philocal.constrain(-(Vbi - voltage), where = GoldContactLocation)
+    for bc in contact_bcs:
+            nlocal.constrain(bc['n'], where=bc['boundary'])
+            plocal.constrain(bc['p'], where=bc['boundary'])
+            philocal.constrain(bc['phi'], where=bc['boundary'])
 
     #Band-to-band recombination models
     Recombination_Langevin_EQ = (Recombination_Langevin_Cell * q * (pmob + nmob) * (nlocal * plocal - niPS * niPS) / (epsilon_values * epsilon_0))
@@ -328,8 +239,8 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     max_iterations = 2000 # Maximum iterations
     dt = 1.00e-9 #Starting time step should be small
     dt_old = dt
-    MaxTimeStep = 1.00e-5 #Increasing above 1.00e-5 sometimes leads to artefacts in the solution even if the residual is small
-    desired_residual = 1.00e-15
+    MaxTimeStep = 1.00e-6 #Increasing above 1.00e-5 sometimes leads to artefacts in the solution even if the residual is small
+    desired_residual = 1.00e-10
     SweepCounter = 0
     residual = 1.00
     TotalTime = 0.00
@@ -400,8 +311,8 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
     residualarray.pop(0)
 
     # Here the electron and hole quasi-fermi levels are calculated
-    psinvar = LUMO - D * numerix.log((nlocal / (NcCell)))
-    psipvar = HOMO + D * numerix.log((plocal / (NvCell)))
+    psinvar = LUMO - D * (numerix.log(nlocal) - LogNcCell)
+    psipvar = HOMO + D * (numerix.log(plocal) - LogNvCell)
 
     #Here the electron and hole current densities are calculated
     Jn = (q * nmob.globalValue * nlocal.globalValue * -psinvar.grad.globalValue) #Vector Quantity
@@ -432,13 +343,9 @@ def solve_for_voltage(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, n
 
     return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "J_Total_Y": J_Total_Y, "n": nlocal.globalValue, "p": plocal.globalValue, "phi": philocal.globalValue, "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue, "CationDensityMatrix": clocal.globalValue, "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Jn_Matrix": Jn_Matrix, "Jp_Matrix": Jp_Matrix, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix}
 
-def simulate_device(output_dir, additional_voltages=None, GenRate_values_default=GenRate_values_default, Recombination_Langevin_values=Recombination_Langevin_values, Recombination_Bimolecular_values=Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone=SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone=SRH_Bulk_Recombination_Zone):
+def simulate_device(output_dir):
 
-    # Determine voltages to simulate
-    if additional_voltages is not None:
-        applied_voltages = additional_voltages
-    else:
-        applied_voltages = np.arange(0.0, 1.3, 0.05)
+    applied_voltages = np.arange(0.0, 1.3, 0.05)
 
     if len(applied_voltages) < multiprocessing.cpu_count() - 1:
         chunk_size = len(applied_voltages)
@@ -468,7 +375,7 @@ def simulate_device(output_dir, additional_voltages=None, GenRate_values_default
         chunk_voltages = applied_voltages[start:start + chunk_size]
 
         # Parallel computation within the chunk
-        chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(delayed(solve_for_voltage)(voltage, dx, dy, nx, ny, SmoothFactor, StretchFactor, D, nFTO, nGold, pFTO, pGold, GenRate_values_default, Recombination_Langevin_values, Recombination_Bimolecular_values, SRH_Interfacial_Recombination_Zone, SRH_Bulk_Recombination_Zone, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, Nc, Nv, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, niPS, Nd_values, Na_values) for voltage in chunk_voltages)
+        chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(delayed(solve_for_voltage)(voltage, nx, ny, D, epsilon_values, n_values, nmob_values, p_values, pmob_values , a_values, anion_mob_values, c_values, cation_mob_values, phi_values, chi, chi_a, chi_c, Eg, TInfinite, tau_p_interface, tau_n_interface, tau_p_bulk, tau_n_bulk, epsilon_0, n_hat, p_hat, n_hat_mixed, p_hat_mixed, q, niPS, Nd_values, Na_values) for voltage in chunk_voltages)
 
         #DeepCopy To avoid overwriting the results in next loop
         copied_result = [copy.deepcopy(r) for r in chunk_results]
@@ -491,6 +398,7 @@ def simulate_device(output_dir, additional_voltages=None, GenRate_values_default
     return copied_result
 
 def main_workflow():
+    current_file = os.path.basename(__file__)[0:-3]
     voltage_sweep_output_dir = "./Outputs/" + current_file + "/VoltageSweep"
 
     if not os.path.exists(voltage_sweep_output_dir):

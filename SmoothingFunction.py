@@ -13,3 +13,11 @@ def smooth(data, sigma):
     """
     smoothed_data = gaussian_filter(data, sigma=sigma)
     return smoothed_data
+
+def flatten_smooth(arr, smoothF):
+    if smoothF > 0.0:
+        arr = smooth(arr, smoothF)
+    return arr.flatten()
+
+def flatten_and_smooth_all(arrays, smoothF):
+    return [flatten_smooth(arr, smoothF) for arr in arrays]
