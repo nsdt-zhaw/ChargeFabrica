@@ -107,8 +107,8 @@ DeviceArchitechture[100:MesoLength+100,:] = SinusoidalArray
 DeviceArchitechture[(MesoLength+100):(MesoLength + 150),:] = TiO2_ID
 
 TopElectrode = FTO_ID
-TopLocationSC = DeviceArchitechture[-1,0] #Semiconducting material adjacent to the top electrode
-BottomLocationSC = DeviceArchitechture[0,0] #Semiconducting material adjacent to the bottom electrode
+TopLocationSC = DeviceArchitechture[-1,:] #Semiconducting materials adjacent to the top electrode
+BottomLocationSC = DeviceArchitechture[0,:] #Semiconducting materials adjacent to the bottom electrode
 BottomElectrode = Carbon_ID
 
 EffectiveMediumApproximationVolumeFraction = 1.00
