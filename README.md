@@ -22,7 +22,7 @@ This Python-based solver uses [Fipy](https://github.com/usnistgov/fipy) to solve
 # Installation
 The code has been tested on [miniforge](https://github.com/conda-forge/miniforge) with Python2.7 installed, which is necessary to be compatible with [pysparse](https://github.com/PythonOptimizers/pysparse).
 
-ChargeFabrica requires the following packages to be installed: numpy, scipy, fipy (ideally with pysparse for optimum performance), joblib, pandas, xlrd, opencv, matplotlib
+ChargeFabrica requires the following packages to be installed: numpy, scipy, fipy (ideally with pysparse for optimum performance), joblib, pandas, xlrd, matplotlib
 
 To further enhance 2D pysparse performance (especially if elements >100k), it is best to disable partial pivoting by navigating to the pysparse LU solver file:
 (For miniforge this would be (miniforge install directory)/envs/(environment name)/lib/python2.7/site-packages/fipy/solvers/pysparse/linearLUsolver.py)
