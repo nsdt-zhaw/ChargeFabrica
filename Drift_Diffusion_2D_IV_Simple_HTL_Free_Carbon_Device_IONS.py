@@ -12,17 +12,15 @@ from fipy.tools import numerix
 import time
 import pandas as pd
 from scipy.ndimage import zoom
+from scipy import constants
 from SmoothingFunction import flatten_and_smooth_all
 from joblib import Parallel, delayed
 import multiprocessing
 from material_maps import Semiconductors, Electrodes
 import copy
 
-q = 1.60217646e-19 # Elementary charge, in Coulombs
-k_B = 1.3806503e-23 #J/K
-epsilon_0 = 8.85418782e-12
 TInfinite = 300.0
-D = k_B * TInfinite / q #=== kT in eV
+(q, k_B, epsilon_0, D) = (constants.electron_volt, constants.Boltzmann, constants.epsilon_0, (constants.Boltzmann * TInfinite) / constants.electron_volt)
 
 name_to_code_SC = {mat.name: mat.code for mat in Semiconductors.values()}
 name_to_code_EL = {mat.name: mat.code for mat in Electrodes.values()}
