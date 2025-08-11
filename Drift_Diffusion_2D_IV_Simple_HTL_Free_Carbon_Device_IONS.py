@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-#This code is a simulation of a HTL-free perovskite solar cell using the finite volume method with the FiPy library.
-#Device architecture: FTO (Boundary)|TiO2 (50 nm)|MAPbI3 (1600 nm)|Carbon (Boundary)
+#This code is a simulation of a 2D carbon-based triple mesoscopic HTL-free device using the finite volume method with the FiPy library.
+#Device architecture: FTO (Boundary)|TiO2 (50 nm)|m-TiO2/MAPbI3 (150 nm)|m-ZrO2.txt/MAPbI3 (1000 nm)|MAPbI3 (100 nm)|Carbon (Boundary)
 import os
 os.environ["OMP_NUM_THREADS"] = "1" #Really important! Pysparse doesnt benefit from multithreading.
 import numpy as np
@@ -244,7 +244,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     Recombination_SRH_Interfacial_Mixed_EQ = (Recombination_Interfacial_SRH_Cell * (nlocal * plocal - niPS * niPS) / (tau_p_interface * (nlocal + n_hat_mixed) + tau_n_interface * (plocal + p_hat_mixed)))
     Recombination_SRH_Bulk_EQ = (Recombination_Bulk_SRH_Cell * (nlocal * plocal - niPS * niPS) / (tau_p_bulk * (nlocal + n_hat) + tau_n_bulk * (plocal + p_hat)))
 
-    Recombination_Combined = (Recombination_Bimolecular_EQ + Recombination_SRH_Bulk_EQ) #Include more recombination mechanisms by adding them to this line
+    Recombination_Combined = (Recombination_Bimolecular_EQ + Recombination_SRH_Bulk_EQ + Recombination_SRH_Interfacial_Mixed_EQ) #Include more recombination mechanisms by adding them to this line
 
     LUMO = philocal + ChiCell
     HOMO = philocal + ChiCell + EgCell

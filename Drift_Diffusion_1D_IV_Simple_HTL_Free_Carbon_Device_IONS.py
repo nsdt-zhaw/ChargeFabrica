@@ -199,7 +199,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     Recombination_SRH_Interfacial_Mixed_EQ = (Recombination_Interfacial_SRH_Cell * (nlocal * plocal - niPS * niPS) / (tau_p_interface * (nlocal + n_hat_mixed) + tau_n_interface * (plocal + p_hat_mixed)))
     Recombination_SRH_Bulk_EQ = (Recombination_Bulk_SRH_Cell * (nlocal * plocal - niPS * niPS) / (tau_p_bulk * (nlocal + n_hat) + tau_n_bulk * (plocal + p_hat)))
 
-    Recombination_Combined = (Recombination_Bimolecular_EQ + Recombination_SRH_Bulk_EQ) #Include more recombination mechanisms by adding them to this line
+    Recombination_Combined = (Recombination_Bimolecular_EQ + Recombination_SRH_Bulk_EQ + Recombination_SRH_Interfacial_Mixed_EQ) #Include more recombination mechanisms by adding them to this line
 
     LUMO = philocal + ChiCell
     HOMO = philocal + ChiCell + EgCell
@@ -237,7 +237,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
         EnableIons = True
         if EnableIons:
             #Here the ionic continuity equations are solved
-            residual = eqcontac.sweep(dt=dt, solver=solver) + residual
+            residual = eqcontac.sweep(dt = dt, solver=solver) + residual
             aold = damp(alocal, aold, DampingFactor)
             cold = damp(clocal, cold, DampingFactor)
 
