@@ -41,8 +41,10 @@ def calculate_absorption_above_bandgap(SolarSpectrumWavelength, SolarSpectrumIrr
 
     # Set the PhotonFluxArray to the photon flux above the bandgap for the last row (the bottom of the device)
     for idx in above_bandgap_indices:
-        PhotonFluxArray[idx, -1, :] = photon_flux_above_bandgap[idx] / PixelWidth
-        GenerationArray[idx, -1, :] = photon_flux_above_bandgap[idx] * DeviceArchitecture2D[-1, :] / PixelWidth
+        absorption_coeff = absorption_coeff_at_solar_wavelengths[idx]
+        attenuation = np.exp(-DeviceArchitecture2D[-1, :] * absorption_coeff * PixelWidth)
+        PhotonFluxArray[idx, -1, :] = photon_flux_above_bandgap[idx] * attenuation / PixelWidth
+        GenerationArray[idx, -1, :] = (photon_flux_above_bandgap[idx] - photon_flux_above_bandgap[idx] * attenuation) * DeviceArchitecture2D[-1, :] / PixelWidth
         PhotonEnergyArray[idx, -1, :] = PhotonFluxArray[idx, -1, :] * photon_energy[idx] * PixelWidth
 
     for idx in all_energy_indices:
