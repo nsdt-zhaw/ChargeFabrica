@@ -30,20 +30,18 @@ RecombinationMatrix = np.load(Simulation_folder + "RecombinationMatrix.npy")
 RadiativeRecombinationMatrix = np.load(Simulation_folder + "Recombination_Bimolecular_EQMatrix.npy")
 PMatrix = np.load(Simulation_folder + "PMatrix.npy")
 NMatrix = np.load(Simulation_folder + "NMatrix.npy")
-JTotal_Y = np.load(Simulation_folder + "J_Total_Y.npy")
-
-for i in range(JTotal_Y.shape[0]):
-    JTotal_Y[i] = signal.medfilt2d(JTotal_Y[i], kernel_size=5)
-
 Jn_Matrix = np.load(Simulation_folder + "Jn_Matrix.npy")[:,1,:,:]
+Jp_Matrix = np.load(Simulation_folder + "Jp_Matrix.npy")[:,1,:,:]
+JTotal_Y = (Jn_Matrix + Jp_Matrix)
 
 for i in range(Jn_Matrix.shape[0]):
     Jn_Matrix[i] = signal.medfilt2d(Jn_Matrix[i], kernel_size=5)
 
-Jp_Matrix = np.load(Simulation_folder + "Jp_Matrix.npy")[:,1,:,:]
-
 for i in range(Jp_Matrix.shape[0]):
     Jp_Matrix[i] = signal.medfilt2d(Jp_Matrix[i], kernel_size=5)
+
+for i in range(JTotal_Y.shape[0]):
+    JTotal_Y[i] = signal.medfilt2d(JTotal_Y[i], kernel_size=5)
 
 JTotal_Y_mean = np.mean(JTotal_Y[:,20:80,:], axis=(1, 2))
 VocLocation = np.unravel_index(np.argmin(np.abs(JTotal_Y_mean)), JTotal_Y_mean.shape)

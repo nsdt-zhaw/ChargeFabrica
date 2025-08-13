@@ -7,16 +7,16 @@ from matplotlib.widgets import Slider
 from scipy.interpolate import interp1d
 
 # Load data
-Simulation_folder = "./Outputs/Drift_Diffusion_1D_IV_Simple_HTL_Free_Carbon_Device_IONS/VoltageSweep/"
+Simulation_folder = "./Outputs/Drift_Diffusion_1D_IV_IONS_With_HTL_PIN_SAM/VoltageSweep/"
 NumberOfSuns = 1.00
 
 GenerationMatrix = np.load(Simulation_folder + "GenValues_Matrix.npy")[:]
 RecombinationMatrix = np.load(Simulation_folder + "RecombinationMatrix.npy")[:]
 PMatrix = np.load(Simulation_folder + "p.npy")[:]
 NMatrix = np.load(Simulation_folder + "n.npy")[:]
-JTotal_Y = np.load(Simulation_folder + "J_Total_Y.npy")[:]
 Jn_Matrix = np.load(Simulation_folder + "Jn_Matrix.npy")[:,1,:,:]
 Jp_Matrix = np.load(Simulation_folder + "Jp_Matrix.npy")[:,1,:,:]
+JTotal_Y = (Jn_Matrix + Jp_Matrix)
 PotentialMatrix = np.load(Simulation_folder + "phi.npy")[:]
 EField_matrix = -np.load(Simulation_folder + "Efield_matrix.npy")[:,1,:,:]
 
