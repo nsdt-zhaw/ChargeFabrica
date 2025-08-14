@@ -38,6 +38,7 @@ def calculate_absorption_above_bandgap(SolarSpectrumWavelength, SolarSpectrumIrr
     GenerationArray = np.zeros((SolarSpectrumWavelength.shape[0], DeviceArchitecture2D.shape[0], DeviceArchitecture2D.shape[1]))
     ThermalisationArray = np.zeros((SolarSpectrumWavelength.shape[0], DeviceArchitecture2D.shape[0], DeviceArchitecture2D.shape[1]))
     PhotonEnergyArray = np.zeros((SolarSpectrumWavelength.shape[0], DeviceArchitecture2D.shape[0], DeviceArchitecture2D.shape[1]))
+    PhotonFluxArrayTotal = np.zeros((SolarSpectrumWavelength.shape[0], DeviceArchitecture2D.shape[0], DeviceArchitecture2D.shape[1]))
 
     # Set the PhotonFluxArray to the photon flux above the bandgap for the last row (the bottom of the device)
     for idx in above_bandgap_indices:
@@ -48,11 +49,11 @@ def calculate_absorption_above_bandgap(SolarSpectrumWavelength, SolarSpectrumIrr
         PhotonEnergyArray[idx, -1, :] = PhotonFluxArray[idx, -1, :] * photon_energy[idx] * PixelWidth
 
     for idx in all_energy_indices:
-        PhotonFluxArray[idx, -1, :] = photon_flux_total[idx] / PixelWidth
+        PhotonFluxArrayTotal[idx, -1, :] = photon_flux_total[idx] / PixelWidth
 
     for row in range(DeviceArchitecture2D.shape[0] - 2, -1, -1):  # Start from the second-to-last row and move upwards
         for idx in all_energy_indices:
-            PhotonFluxArray[idx, row, :] = PhotonFluxArray[idx, row + 1, :]
+            PhotonFluxArrayTotal[idx, row, :] = PhotonFluxArrayTotal[idx, row + 1, :]
 
     # Calculate photon flux from the bottom to the top
     for row in range(DeviceArchitecture2D.shape[0] - 2, -1, -1):  # Start from the second-to-last row and move upwards
@@ -60,12 +61,13 @@ def calculate_absorption_above_bandgap(SolarSpectrumWavelength, SolarSpectrumIrr
             absorption_coeff = absorption_coeff_at_solar_wavelengths[idx]
             attenuation = np.exp(-DeviceArchitecture2D[row, :] * absorption_coeff * PixelWidth)
             PhotonFluxArray[idx, row, :] = PhotonFluxArray[idx, row + 1, :] * attenuation
+            PhotonFluxArrayTotal[idx, row, :] = PhotonFluxArrayTotal[idx, row + 1, :] * attenuation
             GenerationArray[idx, row, :] = PhotonFluxArray[idx, row + 1, :] - PhotonFluxArray[idx, row, :]
             ThermalisationArray[idx, row, :] = GenerationArray[idx, row, :] * (photon_energy[idx] - bandgap_eV * eV_to_J - 3*kT)
 
     for row in range(DeviceArchitecture2D.shape[0] - 2, -1, -1):  # Start from the second-to-last row and move upwards
         for idx in all_energy_indices:
-            PhotonEnergyArray[idx, row, :] = PhotonFluxArray[idx, row + 1, :] * photon_energy[idx] * PixelWidth
+            PhotonEnergyArray[idx, row, :] = PhotonFluxArrayTotal[idx, row + 1, :] * photon_energy[idx] * PixelWidth
 
     ThermalisationArray = -np.sum(ThermalisationArray, axis=0)
     # Calculate the generation rate by summing the photon flux at each wavelength
