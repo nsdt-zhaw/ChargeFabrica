@@ -333,8 +333,8 @@ def simulate_device(output_dir):
     else:
         chunk_size = multiprocessing.cpu_count() - 1
 
-    n_values = 0.00
-    p_values = 0.00
+    n_values = 1.00e-30
+    p_values = 1.00e-30
     a_values = a_initial_values.flatten()
     c_values = c_initial_values.flatten()
     phi_values = 0.00
@@ -388,4 +388,5 @@ def main_workflow():
 
 # Fix for multiprocessing on Windows
 if __name__ == '__main__':
+
     main_workflow()
