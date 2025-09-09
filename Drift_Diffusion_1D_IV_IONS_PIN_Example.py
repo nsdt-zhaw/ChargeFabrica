@@ -290,11 +290,11 @@ def simulate_device(output_dir):
     else:
         chunk_size = multiprocessing.cpu_count() - 1
 
-    n_values = 0.00
-    p_values = 0.00
+    n_values = 1.00e-30
+    p_values = 1.00e-30
     a_values = a_initial_values.flatten()
     c_values = c_initial_values.flatten()
-    phi_values = 0.00
+    phi_values = 1.00e-30
 
     def append_to_npy(filename, new_data):
         new_data = np.expand_dims(new_data, axis=0)
