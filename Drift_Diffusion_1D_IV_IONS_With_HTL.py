@@ -169,8 +169,8 @@ niPS = np.sqrt(Nc * Nv * np.exp(-Eg / D))
 
 def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_values):
 
-    #solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1) #Works out of the box with simple fipy installation, but slower than pysparse
-    solver = fipy.solvers.pysparse.linearLUSolver.LinearLUSolver(precon=None, iterations=1) #Very fast solver
+    solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1) #Works out of the box with simple fipy installation, but slower than pysparse
+    #solver = fipy.solvers.pysparse.linearLUSolver.LinearLUSolver(precon=None, iterations=1) #Very fast solver
 
     philocal = CellVariable(name="electrostatic potential", mesh=mesh, value=phi_values, hasOld=True)
     nlocal = CellVariable(name="electron density", mesh=mesh, value=n_values, hasOld=True)
@@ -215,9 +215,6 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     eqc = (0.00 == -TransientTerm(coeff=q, var=clocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=clocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * LUMO_c.faceGrad, var=clocal))
     eqpoisson = (0.00 == -TransientTerm(var=philocal) + DiffusionTerm(coeff=epsilon, var=philocal) + (q/epsilon_0) * (plocal - nlocal + clocal - alocal + NdCell - NaCell))
 
-    eqcontnp = eqn & eqp #Electron and hole continuity equations
-    eqcontac = eqa & eqc #Anion and cation continuity equations
-
     dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_iterations = 1e-9, 1e-6, 1e-10, 0.05, 1, 2000
     residual, residual_old, dt_old, TotalTime, SweepCounter = 1., 1e10, dt, 0.0, 0
     nold, pold, phiold, aold, cold = [v.value.copy() for v in (nlocal, plocal, philocal, alocal, clocal)]
@@ -228,9 +225,10 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
         for i in range(NumberofSweeps):
             eqpoisson.sweep(dt = dt, solver=solver)
+
             phiold = damp(philocal, phiold, DampingFactor) #The potential should be damped BEFORE passing to the continuity equations!
 
-            residual = eqcontnp.sweep(dt = dt, solver=solver)
+            residual = eqn.sweep(dt = dt, solver=solver) + eqp.sweep(dt = dt, solver=solver)
             nlocal.setValue(np.maximum(nlocal, 1.00e-30))
             plocal.setValue(np.maximum(plocal, 1.00e-30))
             nold = damp(nlocal, nold, DampingFactor)
@@ -239,7 +237,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
         EnableIons = True
         if EnableIons:
             #Here the ionic continuity equations are solved
-            residual = eqcontac.sweep(dt=dt, solver=solver) + residual
+            residual = eqa.sweep(dt = dt, solver=solver) + eqc.sweep(dt = dt, solver=solver) + residual
             aold = damp(alocal, aold, DampingFactor)
             cold = damp(clocal, cold, DampingFactor)
 
@@ -294,7 +292,7 @@ def simulate_device(output_dir):
     p_values = 1.00e-30
     a_values = a_initial_values.flatten()
     c_values = c_initial_values.flatten()
-    phi_values = 0.00
+    phi_values = 1.00e-30
 
     def append_to_npy(filename, new_data):
         new_data = np.expand_dims(new_data, axis=0)
@@ -345,5 +343,4 @@ def main_workflow():
 
 # Fix for multiprocessing on Windows
 if __name__ == '__main__':
-
     main_workflow()
