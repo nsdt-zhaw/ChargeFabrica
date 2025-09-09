@@ -7,7 +7,7 @@ from matplotlib.widgets import Slider
 from scipy.interpolate import interp1d
 
 # Load data
-Simulation_folder = "./Outputs/Drift_Diffusion_1D_IV_IONS_With_HTL/VoltageSweep/"
+Simulation_folder = "./Outputs/Drift_Diffusion_1D_IV_IONS_NIP_Example/VoltageSweep/"
 NumberOfSuns = 1.00
 
 GenerationMatrix = np.load(Simulation_folder + "GenValues_Matrix.npy")[:]
@@ -182,4 +182,5 @@ def update(val):
 
 update(0) # Initial call to display the first frame
 slider.on_changed(update)
+
 plt.show()
