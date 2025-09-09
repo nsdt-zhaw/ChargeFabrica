@@ -29,7 +29,8 @@ EgMatrix = np.load(Simulation_folder + "EgMatrix.npy")[:]
 ResidualMatrix = np.load(Simulation_folder + "ResidualMatrix.npy")[:]
 RadiativeRecombinationMatrix = np.load(Simulation_folder + "Recombination_Bimolecular_EQMatrix.npy")[:]
 PLYield = 100*RadiativeRecombinationMatrix / (GenerationMatrix+1)
-
+SweepCounterMatrix = np.load(Simulation_folder + "SweepCounterMatrix.npy")[:]
+print("SweepCounterMatrix", SweepCounterMatrix)
 def medfilt(x, k):
     """Apply a length-k median filter to a 1D array x. Boundaries are extended by repeating endpoints."""
     assert k % 2 == 1, "Median filter length must be odd."
@@ -71,13 +72,16 @@ if len(applied_voltages) > 3:
     voltage_fine = np.linspace(applied_voltages[0], applied_voltages[-1], 1000)
     JTotal_Y_fine = f_interp(voltage_fine)
     Voc = applied_voltages[np.argmin(np.abs(JTotal_Y_mean))]
-    #Jsc = -f_interp(0)
-    max_power_index = np.argmin(JTotal_Y_mean * applied_voltages)
+    Jsc = f_interp(0)
+    PINCHECK = 1.00
+    if Jsc > 0:
+        PINCHECK = -1.00
+    max_power_index = np.argmin(PINCHECK * JTotal_Y_mean * applied_voltages)
     max_power_voltage = applied_voltages[max_power_index]
     max_power_current = JTotal_Y_mean[max_power_index]
     MaxPowerOut = max_power_voltage * max_power_current * -1
     MaxPowerIn = NumberOfSuns * 1000
-    Efficiency = (MaxPowerOut/MaxPowerIn)*100
+    Efficiency = (PINCHECK * MaxPowerOut/MaxPowerIn)*100
 
     print "Maximum power point: {:.3f} V, {:.3f} A/m^2".format(max_power_voltage, max_power_current)
     print "Efficiency: {:.3f}".format(Efficiency)
@@ -97,7 +101,7 @@ if len(applied_voltages) > 3:
     #ax2.text(0.05, 0.65, "Fill Factor: {:.3f}%".format((MaxPowerOut/(Voc*Jsc))*100), fontsize=8, transform=ax2.transAxes)
     ax2.text(0.05, 0.60, "MPP: {:.3f} V, {:.3f} A/m^2".format(max_power_voltage, max_power_current), fontsize=8, transform=ax2.transAxes)
     ax2.set_ylim(-300, 300)
-    ax2.set_xlim(-0.3, 2.5)
+    ax2.set_xlim(0, 2.6)
     #Add twin y axis
     ax3 = ax2.twinx()
     ax3.plot(applied_voltages, ResidualMatrix)
@@ -182,5 +186,4 @@ def update(val):
 
 update(0) # Initial call to display the first frame
 slider.on_changed(update)
-
 plt.show()
