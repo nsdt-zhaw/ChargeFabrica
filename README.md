@@ -4,7 +4,7 @@ A Python-based Finite Difference Multi-dimensional Electro-ionic Drift Diffusion
 <img src="https://github.com/user-attachments/assets/8fefefaf-dfd4-4be8-8c48-8add559b91da" width="200" alt="DOI" data-canonical-src="" style="max-width: 1%;">
 
 ##### Table of Contents  
-[installation](#installation)  
+[installation](#Installation)  
 [quickstart guide](#quickstart)  
 This Python-based solver uses [fipy](https://github.com/usnistgov/fipy) to solve the semiconductor equations.
 
@@ -22,7 +22,7 @@ This Python-based solver uses [fipy](https://github.com/usnistgov/fipy) to solve
 
 </div>
 
-<a name="installation"/>
+<a name="Installation"/>
 ## Installation
 The code has been tested on [miniforge](https://github.com/conda-forge/miniforge) with Python2.7 installed, which is necessary to be compatible with [pysparse](https://github.com/PythonOptimizers/pysparse).
 
