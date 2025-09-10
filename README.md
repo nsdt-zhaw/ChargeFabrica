@@ -5,11 +5,7 @@ A Python-based Finite Difference Multi-dimensional Electro-ionic Drift Diffusion
 
 # Table of Contents
 1. [Installation](#installation)
-2. [Example2](#example2)
-3. [Third Example](#third-example)
-4. [Fourth Example](#fourth-examplehttpwwwfourthexamplecom)
-
-
+2. [QuickStart](#quickstart)
 
 
 This Python-based solver uses [fipy](https://github.com/usnistgov/fipy) to solve the semiconductor equations.
@@ -39,6 +35,9 @@ The ChargeFabrica repo can then be cloned using the command:
 ```console
 git clone https://github.com/nsdt-zhaw/ChargeFabrica.git
 ```
+## QuickStart
+It is recommended to start with the script 
+
 # Computation Time
 The 1D compute time with ions enabled on a Intel(R) Core(TM) i9-12900 desktop PC is roughly 1-2 minutes.
 
