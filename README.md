@@ -3,7 +3,7 @@ A Python-based Finite Difference Multi-dimensional Electro-ionic Drift Diffusion
 
 <img src="https://github.com/user-attachments/assets/8fefefaf-dfd4-4be8-8c48-8add559b91da" width="200" alt="DOI" data-canonical-src="" style="max-width: 1%;">
 
-# Table of Contents
+## Table of Contents
 1. [Installation](#installation)
 2. [QuickStart](#quickstart)
 
@@ -42,14 +42,14 @@ Once the simulation is completed, the results are saved as .npy files in the ./O
 
 The results can then be plotted using the [PlottingResults1D.py](PlottingResults1D.py) script.
 
-# Computation Time
+## Computation Time
 The 1D compute time with ions enabled on a Intel(R) Core(TM) i9-12900 desktop PC is roughly 1-2 minutes.
 
 The 2D compute time with ions enabled on a dedicated server with AMD EPYC 74F3 processor for ~100k elements is roughly 2 hours.
 
 It is therefore **strongly** recommended to test the code in 1D before moving to 2D.
 
-# Numerics and Damping
+## Numerics and Damping
 Drift-Diffusion problems can be quite challenging to solve numerically, depending on the material parameters used and the geometry employed.
 
 If the desired residual isn't achieved due to frequent residual instabilities, then the DampingFactor ratio must be decreased. This comes at a cost of decreasing the effective time step, which often requires increasing the number of iterations necessary for convergence.
