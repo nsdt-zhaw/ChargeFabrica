@@ -37,7 +37,9 @@ git clone https://github.com/nsdt-zhaw/ChargeFabrica.git
 ```
 ## QuickStart
 It is recommended to start with the script [Drift_Diffusion_1D_IV_IONS_NIP_Example.py](Drift_Diffusion_1D_IV_IONS_NIP_Example.py) by executing it.
+
 Once the simulation is completed, the results are saved as .npy files in the ./Outputs folder
+
 The results can then be plotted using the [PlottingResults1D.py](PlottingResults1D.py) script.
 
 # Computation Time
