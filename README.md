@@ -35,7 +35,10 @@ The prerequisite packages can be installed using pip:
 ```console
 pip install numpy scipy fipy pandas joblib xlrd matplotlib
 ```
-
+The ChargeFabrica repo can then be cloned using the command:
+```console
+git clone https://github.com/nsdt-zhaw/ChargeFabrica.git
+```
 # Computation Time
 The 1D compute time with ions enabled on a Intel(R) Core(TM) i9-12900 desktop PC is roughly 1-2 minutes.
 
