@@ -31,7 +31,7 @@ This Python-based solver uses [fipy](https://github.com/usnistgov/fipy) to solve
 ## Installation
 ChargeFabrica requires the following packages to be installed: [numpy](https://github.com/numpy/numpy), [scipy](https://github.com/scipy/scipy), [fipy](https://github.com/usnistgov/fipy), [joblib](https://github.com/joblib/joblib), [pandas](https://github.com/pandas-dev/pandas), [xlrd](https://github.com/python-excel/xlrd), [matplotlib](https://github.com/matplotlib/matplotlib)
 
-The prerequisite packages (without pysparse) can be installed using pip: 
+The prerequisite packages can be installed using pip: 
 ```console
 pip install numpy scipy fipy pandas joblib xlrd matplotlib
 ```
