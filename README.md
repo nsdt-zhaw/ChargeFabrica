@@ -35,7 +35,7 @@ ChargeFabrica requires the following packages to be installed: [numpy](https://g
 
 The prerequisite packages (without pysparse) can be installed using pip: 
 ```console
-foo@bar:~$ pip install numpy scipy fipy pandas joblib xlrd matplotlib
+pip install numpy scipy fipy pandas joblib xlrd matplotlib
 ```
 
 To further enhance 2D pysparse performance (especially if elements >100k), it is best to disable partial pivoting by navigating to the pysparse LU solver file:
