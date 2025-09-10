@@ -23,7 +23,8 @@ This Python-based solver uses [fipy](https://github.com/usnistgov/fipy) to solve
 
 </div>
 
-<a name="# Installation"/>
+<a name="installation"/>
+## Installation
 The code has been tested on [miniforge](https://github.com/conda-forge/miniforge) with Python2.7 installed, which is necessary to be compatible with [pysparse](https://github.com/PythonOptimizers/pysparse).
 
 ChargeFabrica requires the following packages to be installed: [numpy](https://github.com/numpy/numpy), [scipy](https://github.com/scipy/scipy), [fipy](https://github.com/usnistgov/fipy) (ideally with [pysparse](https://github.com/PythonOptimizers/pysparse) for optimum performance), [joblib](https://github.com/joblib/joblib), [pandas](https://github.com/pandas-dev/pandas), [xlrd](https://github.com/python-excel/xlrd), [matplotlib](https://github.com/matplotlib/matplotlib)
