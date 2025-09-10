@@ -13,11 +13,6 @@ A Python-based Finite Difference Multi-dimensional Electro-ionic Drift Diffusion
 
 ## Introduction
 ChargeFabrica uses [fipy](https://github.com/usnistgov/fipy) to solve the semiconductor equations in 1D and 2D, thereby determining the electrostatic potential, charge density distributions for electrons, holes and mobile ions and the resulting current-voltage relationships. Furthermore, Beer–Lambert generation, various recombination mechanisms, and PL Yield can be modelled. The 2D solver is designed to handle arbitrary semiconductor geometries which can be defined within a numpy array.
-
-<img src="https://latex.codecogs.com/svg.image?\small{\begin{equation}{\varepsilon}_r{\nabla}^2\varphi=\frac{-e}{{\epsilon}_0}\left(p-n&plus;c-a&plus;N^&plus;_D-N^-_A\right)\label{PoissonEquation}\end{equation}}" title="\textbf{Poisson Equation:}\small{\begin{equation}{\varepsilon}_r{\nabla}^2\varphi=\frac{-e}{{\epsilon}_0}\left(p-n+c-a+N^+_D-N^-_A\right)\label{PoissonEquation}\end{equation}}" />
-<img src="https://latex.codecogs.com/svg.image?\small\begin{equation}e\frac{\partial&space;n}{\partial&space;t}={\nabla}^2n&space;e{\mu}_n\mathrm{k_BT}-\nabla\cdot&space;n&space;e{\mu}_n\nabla(\varphi&plus;\chi-\mathrm{k_BT}\ln(N_c))&plus;eG-eR\label{ElectronContinuity}\end{equation}" title="\begin{equation}e\frac{\partial n}{\partial t}={\nabla}^2n e{\mu}_n\mathrm{k_BT}-\nabla\cdot n e{\mu}_n\nabla(\varphi+\chi-\mathrm{k_BT}\ln(N_c))+eG-eR\label{ElectronContinuity}\end{equation}" />
-<img src="https://latex.codecogs.com/svg.image?\small{e\frac{\partial&space;p}{\partial&space;t}={\nabla}^2p&space;e{\mu}_p\mathrm{k_BT}&plus;\nabla\cdot&space;p&space;e{\mu}_p\nabla(\varphi&plus;\chi&plus;E_g&plus;\mathrm{k_BT}\ln(N_v))&plus;eG-eR" title="e\frac{\partial p}{\partial t}={\nabla}^2p e{\mu}_p\mathrm{k_BT}+\nabla\cdot p e{\mu}_p\nabla(\varphi+\chi+E_g+\mathrm{k_BT}\ln(N_v))+eG-eR}" />
-
 ### Example Problems:
 <div class="grid cards" markdown>
 
