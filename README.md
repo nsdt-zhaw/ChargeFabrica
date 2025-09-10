@@ -6,7 +6,7 @@ A Python-based Finite Difference Multi-dimensional Electro-ionic Drift Diffusion
 ## Table of Contents
 1. [Installation](#installation)
 2. [QuickStart](#quickstart)
-3. [Numerics and Damping](numerics-and-damping)
+3. [Numerics and Damping](#numerics-and-damping)
 4. [How to cite](#how-to-cite)
 
 
