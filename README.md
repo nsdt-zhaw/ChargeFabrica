@@ -5,7 +5,7 @@ A Python-based Finite Difference Multi-dimensional Electro-ionic Drift Diffusion
 
 ##### Table of Contents  
 [Installation](#installation)  
-
+[QuickStart Guide](#quickstart)  
 This Python-based solver uses [fipy](https://github.com/usnistgov/fipy) to solve the semiconductor equations.
 
 <div class="grid cards" markdown>
