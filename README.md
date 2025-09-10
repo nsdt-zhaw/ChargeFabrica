@@ -60,6 +60,7 @@ For very stiff problems, it may be necessary to sweep the Poisson and electronic
 
 ## How to cite
 ChargeFabrica has been published as:
+
 A Python-based Finite Difference Multi-dimensional Electro-ionic Drift Diffusion Simulator for Perovskite Solar Cells
 
 
