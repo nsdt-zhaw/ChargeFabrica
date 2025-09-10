@@ -13,10 +13,7 @@ A Python-based Finite Difference Multi-dimensional Electro-ionic Drift Diffusion
 
 ## Introduction
 ChargeFabrica uses [fipy](https://github.com/usnistgov/fipy) to solve the semiconductor equations in 1D and 2D, thereby determining the electrostatic potential, charge density distributions for electrons, holes and mobile ions and the resulting current-voltage relationships. Furthermore, Beer–Lambert generation, various recombination mechanisms, and PL Yield can be modelled. The 2D solver is designed to handle arbitrary semiconductor geometries which can be defined within a numpy array.
-\small{\begin{equation}
-e\frac{\partial n}{\partial t}={\nabla }^2n e{\mu }_n\mathrm{k_BT}-\nabla \cdot n e{\mu }_n\nabla (\varphi +\chi-\mathrm{k_BT}\ln(N_c))+eG-eR
-\label{ElectronContinuity}
-\end{equation}}
+\[\begin{equation}e\frac{\partial n}{\partial t}={\nabla}^2n e{\mu}_n\mathrm{k_BT}-\nabla\cdot n e{\mu}_n\nabla(\varphi+\chi-\mathrm{k_BT}\ln(N_c))+eG-eR\label{ElectronContinuity}\end{equation}\]
 
 ### Example Problems:
 <div class="grid cards" markdown>
