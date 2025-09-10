@@ -4,13 +4,13 @@ A Python-based Finite Difference Multi-dimensional Electro-ionic Drift Diffusion
 <img src="https://github.com/user-attachments/assets/8fefefaf-dfd4-4be8-8c48-8add559b91da" width="200" alt="DOI" data-canonical-src="" style="max-width: 1%;">
 
 # Table of Contents
-1. [Example](#example)
+1. [Installation](#installation)
 2. [Example2](#example2)
 3. [Third Example](#third-example)
 4. [Fourth Example](#fourth-examplehttpwwwfourthexamplecom)
 
 
-## Example
+## Installation
 ## Example2
 ## Third Example
 ## [Fourth Example](http://www.fourthexample.com) 
