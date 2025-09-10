@@ -6,6 +6,7 @@ A Python-based Finite Difference Multi-dimensional Electro-ionic Drift Diffusion
 ## Table of Contents
 1. [Installation](#installation)
 2. [QuickStart](#quickstart)
+3. [How to cite](#cite)
 
 
 This Python-based solver uses [fipy](https://github.com/usnistgov/fipy) to solve the semiconductor equations.
@@ -56,6 +57,10 @@ If the desired residual isn't achieved due to frequent residual instabilities, t
 
 **Note:** The residual may increase briefly for certain problems as the timestep is being dynamically increased. This usually does not require an adjustment of the DampingFactor.
 For very stiff problems, it may be necessary to sweep the Poisson and electronic continuity equations multiple times per time step. However, the computational overhead of sweeping is very significant, and it is usually better to adjust the DampingFactor.
+
+## How to cite
+ChargeFabrica has been published as:
+A Python-based Finite Difference Multi-dimensional Electro-ionic Drift Diffusion Simulator for Perovskite Solar Cells
 
 
 
