@@ -6,7 +6,7 @@ import os
 os.environ["OMP_NUM_THREADS"] = "1" #Really important! Pysparse doesnt benefit from multithreading.
 import numpy as np
 from mark_interface_file import mark_interfaces, mark_interfaces_mixed
-from calculate_absorption_old import calculate_absorption_above_bandgap
+from calculate_absorption import calculate_absorption_above_bandgap
 from fipy import CellVariable, TransientTerm, DiffusionTerm, ExponentialConvectionTerm, ResidualTerm
 import fipy
 from fipy.tools import numerix
