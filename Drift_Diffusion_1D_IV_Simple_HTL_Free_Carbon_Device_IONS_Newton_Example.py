@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 #This code is a simulation of a HTL-free perovskite solar cell using the finite volume method with the FiPy library.
 #Device architecture: FTO (Boundary)|TiO2 (50 nm)|MAPbI3 (1600 nm)|Carbon (Boundary)
+#The solver uses the Newton method to accelerate convergence.
 import os
 os.environ["OMP_NUM_THREADS"] = "1" #Really important! Pysparse doesnt benefit from multithreading.
 import numpy as np
 from mark_interface_file import mark_interfaces, mark_interfaces_mixed
 from calculate_absorption_old import calculate_absorption_above_bandgap
-from fipy import CellVariable, TransientTerm, DiffusionTerm, ExponentialConvectionTerm
+from fipy import CellVariable, TransientTerm, DiffusionTerm, ExponentialConvectionTerm, ResidualTerm
 import fipy
 from fipy.tools import numerix
 import time
@@ -29,6 +30,7 @@ Carbon_ID = name_to_code_EL["Carbon"]
 PS_ID = name_to_code_SC["PS"]
 TiO2_ID = name_to_code_SC["mTiO2"]
 FTO_ID = name_to_code_EL["FTO"]
+ZrO2_ID = name_to_code_SC["ZrO2"]
 
 def map_semiconductor_property(devarray, prop):
     return np.vectorize(lambda x: getattr(Semiconductors[x], prop))(devarray)
@@ -176,15 +178,24 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     alocal = CellVariable(name="anion density", mesh=mesh, value=a_values, hasOld=True)
     clocal = CellVariable(name="cation density", mesh=mesh, value=c_values, hasOld=True)
 
+    dplocal = CellVariable(name='d_hole', mesh=mesh, hasOld=True, value=0.)
+    dnlocal = CellVariable(name='d_electron', mesh=mesh, hasOld=True, value=0.)
+    dalocal = CellVariable(name='d_anion', mesh=mesh, hasOld=True, value=0.)
+    dclocal = CellVariable(name='d_cation', mesh=mesh, hasOld=True, value=0.)
+    dphilocal = CellVariable(name='d_potential', mesh=mesh, hasOld=True, value=0.)
+
     contact_bcs = [
         {'boundary': mesh.facesTop, 'n': nTop, 'p': pTop, 'phi': 0},
         {'boundary': mesh.facesBottom, 'n': nBottom, 'p': pBottom, 'phi': -(Vbi - voltage)}
     ]
 
     for bc in contact_bcs:
-            nlocal.constrain(bc['n'], where=bc['boundary'])
-            plocal.constrain(bc['p'], where=bc['boundary'])
-            philocal.constrain(bc['phi'], where=bc['boundary'])
+        nlocal.constrain(bc['n'], where=bc['boundary'])
+        dnlocal.constrain(0., where=bc['boundary'])
+        plocal.constrain(bc['p'], where=bc['boundary'])
+        dplocal.constrain(0., where=bc['boundary'])
+        philocal.constrain(bc['phi'], where=bc['boundary'])
+        dphilocal.constrain(0., where=bc['boundary'])
 
     #Band-to-band recombination models
     Recombination_Langevin_EQ = (Recombination_Langevin_Cell * q * (pmob + nmob) * (nlocal * plocal - niPS * niPS) / (epsilon_values * epsilon_0))
@@ -209,18 +220,52 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     eqc = (0.00 == -TransientTerm(coeff=q, var=clocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=clocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * LUMO_c.faceGrad, var=clocal))
     eqpoisson = (0.00 == -TransientTerm(var=philocal) + DiffusionTerm(coeff=epsilon, var=philocal) + (q/epsilon_0) * (plocal - nlocal + clocal - alocal + NdCell - NaCell))
 
-    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_iterations = 1e-9, 1e-6, 1e-10, 0.05, 1, 2000
+    D_Recombination_SRH_Bulk_EQ_N = Recombination_Bulk_SRH_Cell * ((dplocal * (
+                tau_p_bulk * (dnlocal + n_hat_mixed) + tau_n_bulk * (dplocal + p_hat_mixed))) - tau_p_bulk * (
+                                                                               dnlocal * dplocal - niPS * niPS)) / ((
+                                                                                                                                tau_p_bulk * (
+                                                                                                                                    dnlocal + n_hat_mixed) + tau_n_bulk * (
+                                                                                                                                            dplocal + p_hat_mixed)) * (
+                                                                                                                                tau_p_bulk * (
+                                                                                                                                    dnlocal + n_hat_mixed) + tau_n_bulk * (
+                                                                                                                                            dplocal + p_hat_mixed)))
+    D_Recombination_Bimolecular_EQ_N = Recombination_Bimolecular_Cell * (dplocal)
+
+    D_Recombination_SRH_Bulk_EQ_P = Recombination_Bulk_SRH_Cell * ((dnlocal * (
+                tau_p_bulk * (dnlocal + n_hat_mixed) + tau_n_bulk * (dplocal + p_hat_mixed))) - tau_n_bulk * (
+                                                                               dnlocal * dplocal - niPS * niPS)) / ((
+                                                                                                                                tau_p_bulk * (
+                                                                                                                                    dnlocal + n_hat_mixed) + tau_n_bulk * (
+                                                                                                                                            dplocal + p_hat_mixed)) * (
+                                                                                                          tau_p_bulk * (
+                                                                                                                                    dnlocal + n_hat_mixed) + tau_n_bulk * (
+                                                                                                                                            dplocal + p_hat_mixed)))
+    D_Recombination_Bimolecular_EQ_P = Recombination_Bimolecular_Cell * (dnlocal)
+
+    underRelaxation = 1.
+
+    deqn = ((0.00 == -TransientTerm(coeff=q, var=dnlocal) + DiffusionTerm(coeff=q * D * nmob.harmonicFaceValue, var=dnlocal) - ExponentialConvectionTerm( coeff=q * nmob.harmonicFaceValue * (LUMO + D * LogNcCell).faceGrad, var=dnlocal) - DiffusionTerm(coeff=q * D * nmob.harmonicFaceValue * nlocal.harmonicFaceValue,var=dphilocal) - D_Recombination_Bimolecular_EQ_N) + ResidualTerm(equation=eqn, underRelaxation=underRelaxation))
+    deqp = ((0.00 == -TransientTerm(coeff=q, var=dplocal) + DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=dplocal) + ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * (HOMO - D * LogNvCell).faceGrad, var=dplocal) + DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue * plocal.harmonicFaceValue, var=dphilocal) - D_Recombination_Bimolecular_EQ_P) + ResidualTerm(equation=eqp, underRelaxation=underRelaxation))
+    deqa = ((0.00 == -TransientTerm(coeff=q, var=dalocal) + DiffusionTerm(coeff=q * D * anionmob.harmonicFaceValue, var=dalocal) - ExponentialConvectionTerm(coeff=q * anionmob.harmonicFaceValue * LUMO_a.faceGrad, var=dalocal)) + ResidualTerm(equation=eqa, underRelaxation=underRelaxation))
+    deqc = ((0.00 == -TransientTerm(coeff=q, var=dclocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=dclocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * LUMO_c.faceGrad, var=dclocal)) + ResidualTerm(equation=eqc, underRelaxation=underRelaxation))
+    deqpoisson = ((0.00 == -TransientTerm(var=dphilocal) + DiffusionTerm(coeff=epsilon, var=dphilocal) + (q / epsilon_0) * (dplocal - dnlocal + dclocal - dalocal)) + ResidualTerm(equation=eqpoisson, underRelaxation=underRelaxation))
+
+    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_iterations = 1e-7, 1e-6, 1e-10, 0.02, 1, 2000
     residual, residual_old, dt_old, TotalTime, SweepCounter = 1., 1e10, dt, 0.0, 0
+    residualarray = np.zeros(max_iterations)
 
     while SweepCounter < max_iterations and residual > desired_residual:
 
         t0 = time.time()
 
         for i in range(NumberofSweeps):
-            eqpoisson.sweep(dt = dt, solver=solver)
+            deqpoisson.sweep(dt=dt, solver=solver)
+            philocal.value = philocal.value + dphilocal.value
             philocal.setValue(DampingFactor * philocal.value + (1 - DampingFactor) * philocal.old)  # The potential should be damped BEFORE passing to the continuity equations!
 
-            residual = eqn.sweep(dt = dt, solver=solver) + eqp.sweep(dt = dt, solver=solver)
+            residual = deqn.sweep(dt=dt, solver=solver) + deqp.sweep(dt=dt, solver=solver)
+            nlocal.value = nlocal.value + dnlocal.value
+            plocal.value = plocal.value + dplocal.value
             nlocal.setValue(np.maximum(nlocal, 1.00e-30))
             plocal.setValue(np.maximum(plocal, 1.00e-30))
             nlocal.setValue(DampingFactor * nlocal.value + (1 - DampingFactor) * nlocal.old)
@@ -229,22 +274,26 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
         EnableIons = True
         if EnableIons:
             #Here the ionic continuity equations are solved
-            residual = eqa.sweep(dt = dt, solver=solver) + eqc.sweep(dt = dt, solver=solver) + residual
+            residual = deqa.sweep(dt=dt, solver=solver) + deqc.sweep(dt=dt, solver=solver) + residual
+            alocal.value = alocal.value + dalocal.value
+            clocal.value = clocal.value + dclocal.value
             alocal.setValue(DampingFactor * alocal.value + (1 - DampingFactor) * alocal.old)
             clocal.setValue(DampingFactor * clocal.value + (1 - DampingFactor) * clocal.old)
+
+        residualarray[SweepCounter] = residual
 
         PercentageImprovementPerSweep = (1 - (residual / residual_old) * dt_old / dt) * 100
 
         if residual > residual_old * 1.2:
-            dt = max(1e-11, dt * 0.1)
+            dt = max(1e-7, dt * 0.1)
         else:
             dt = min(MaxTimeStep, dt * 1.05)
 
         dt_old = dt
         residual_old = residual
 
-        #Update old
-        for v in (nlocal, plocal, alocal, clocal, philocal): v.updateOld()
+        # Update old
+        for v in (nlocal, plocal, alocal, clocal, philocal, dnlocal, dplocal, dalocal, dclocal, dphilocal): v.updateOld()
 
         TotalTime = TotalTime + dt
 
@@ -269,11 +318,11 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
     (PotentialMatrix, GenValues_Matrix, RecombinationMatrix, Recombination_Bimolecular_EQMatrix, NMatrix, PMatrix, chiMatrix, EgMatrix, psinvarmatrix, psipvarmatrix) = reshapefunction([philocal, gen_rate, Recombination_Combined, Recombination_Bimolecular_EQ, nlocal, plocal, ChiCell, EgCell, psinvar, psipvar])
 
-    return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue, "p": plocal.globalValue, "phi": philocal.globalValue, "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue, "CationDensityMatrix": clocal.globalValue, "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Jn_Matrix": Jn_Matrix, "Jp_Matrix": Jp_Matrix, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix}
+    return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue, "p": plocal.globalValue, "phi": philocal.globalValue, "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue, "CationDensityMatrix": clocal.globalValue, "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Jn_Matrix": Jn_Matrix, "Jp_Matrix": Jp_Matrix, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix, "ResidualArray": residualarray}
 
 def simulate_device(output_dir):
 
-    applied_voltages = np.arange(0.0, 1.15, 0.05)
+    applied_voltages = np.arange(0.0, 1.25, 0.025)
 
     if len(applied_voltages) < multiprocessing.cpu_count() - 1:
         chunk_size = len(applied_voltages)

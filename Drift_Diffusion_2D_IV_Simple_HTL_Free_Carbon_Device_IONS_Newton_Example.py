@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-#This code is a simulation of a HTL-free perovskite solar cell using the finite volume method with the FiPy library.
-#Device architecture: FTO (Boundary)|TiO2 (50 nm)|MAPbI3 (1600 nm)|Carbon (Boundary)
+#This code is a simulation of a 2D carbon-based triple mesoscopic HTL-free device using the finite volume method with the FiPy library.
+#Device architecture: FTO (Boundary)|TiO2 (50 nm)|m-TiO2/MAPbI3 (150 nm)|m-ZrO2.txt/MAPbI3 (1000 nm)|MAPbI3 (100 nm)|Carbon (Boundary)
 #The solver uses the Newton method to accelerate convergence.
 import os
 os.environ["OMP_NUM_THREADS"] = "1" #Really important! Pysparse doesnt benefit from multithreading.
 import numpy as np
 from mark_interface_file import mark_interfaces, mark_interfaces_mixed
-from calculate_absorption import calculate_absorption_above_bandgap
+from calculate_absorption_old import calculate_absorption_above_bandgap
 from fipy import CellVariable, TransientTerm, DiffusionTerm, ExponentialConvectionTerm, ResidualTerm
 import fipy
 from fipy.tools import numerix
@@ -220,13 +220,13 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     philocal = CellVariable(name="electrostatic potential", mesh=mesh, value=phi_values, hasOld=True)
     nlocal = CellVariable(name="electron density", mesh=mesh, value=n_values, hasOld=True)
     plocal = CellVariable(name="hole density", mesh=mesh, value=p_values, hasOld=True)
-    alocal = CellVariable(name="anion density", mesh=mesh, value=a_values)
-    clocal = CellVariable(name="cation density", mesh=mesh, value=c_values)
+    alocal = CellVariable(name="anion density", mesh=mesh, value=a_values, hasOld=True)
+    clocal = CellVariable(name="cation density", mesh=mesh, value=c_values, hasOld=True)
 
     dplocal = CellVariable(name='d_hole', mesh=mesh, hasOld=True, value=0.)
     dnlocal = CellVariable(name='d_electron', mesh=mesh, hasOld=True, value=0.)
-    dalocal = CellVariable(name='d_anion', mesh=mesh, value=0.)
-    dclocal = CellVariable(name='d_cation', mesh=mesh, value=0.)
+    dalocal = CellVariable(name='d_anion', mesh=mesh, hasOld=True, value=0.)
+    dclocal = CellVariable(name='d_cation', mesh=mesh, hasOld=True, value=0.)
     dphilocal = CellVariable(name='d_potential', mesh=mesh, hasOld=True, value=0.)
 
     contact_bcs = [
@@ -241,10 +241,6 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
         dplocal.constrain(0., where=bc['boundary'])
         philocal.constrain(bc['phi'], where=bc['boundary'])
         dphilocal.constrain(0., where=bc['boundary'])
-
-    def damp(var, old, alpha):
-        var.setValue(alpha * var.value + (1 - alpha) * old)
-        return np.copy(var.value)
 
     #Band-to-band recombination models
     Recombination_Langevin_EQ = (Recombination_Langevin_Cell * q * (pmob + nmob) * (nlocal * plocal - niPS * niPS) / (epsilon_values * epsilon_0))
@@ -301,7 +297,6 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
     dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_iterations = 1e-7, 1e-6, 1e-10, 0.02, 1, 2000
     residual, residual_old, dt_old, TotalTime, SweepCounter = 1., 1e10, dt, 0.0, 0
-    nold, pold, phiold, aold, cold = [v.value.copy() for v in (nlocal, plocal, philocal, alocal, clocal)]
     residualarray = np.zeros(max_iterations)
 
     while SweepCounter < max_iterations and residual > desired_residual:
@@ -311,15 +306,15 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
         for i in range(NumberofSweeps):
             deqpoisson.sweep(dt=dt, solver=solver)
             philocal.value = philocal.value + dphilocal.value
-            phiold = damp(philocal, phiold, DampingFactor) #The potential should be damped BEFORE passing to the continuity equations!
+            philocal.setValue(DampingFactor * philocal.value + (1 - DampingFactor) * philocal.old)  # The potential should be damped BEFORE passing to the continuity equations!
 
             residual = deqn.sweep(dt=dt, solver=solver) + deqp.sweep(dt=dt, solver=solver)
             nlocal.value = nlocal.value + dnlocal.value
             plocal.value = plocal.value + dplocal.value
             nlocal.setValue(np.maximum(nlocal, 1.00e-30))
             plocal.setValue(np.maximum(plocal, 1.00e-30))
-            nold = damp(nlocal, nold, DampingFactor)
-            pold = damp(plocal, pold, DampingFactor)
+            nlocal.setValue(DampingFactor * nlocal.value + (1 - DampingFactor) * nlocal.old)
+            plocal.setValue(DampingFactor * plocal.value + (1 - DampingFactor) * plocal.old)
 
         EnableIons = True
         if EnableIons:
@@ -327,8 +322,8 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
             residual = deqa.sweep(dt=dt, solver=solver) + deqc.sweep(dt=dt, solver=solver) + residual
             alocal.value = alocal.value + dalocal.value
             clocal.value = clocal.value + dclocal.value
-            aold = damp(alocal, aold, DampingFactor)
-            cold = damp(clocal, cold, DampingFactor)
+            alocal.setValue(DampingFactor * alocal.value + (1 - DampingFactor) * alocal.old)
+            clocal.setValue(DampingFactor * clocal.value + (1 - DampingFactor) * clocal.old)
 
         residualarray[SweepCounter] = residual
 
@@ -343,7 +338,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
         residual_old = residual
 
         # Update old
-        for v in (nlocal, plocal, philocal, dnlocal, dplocal, dphilocal): v.updateOld()
+        for v in (nlocal, plocal, alocal, clocal, philocal, dnlocal, dplocal, dalocal, dclocal, dphilocal): v.updateOld()
 
         TotalTime = TotalTime + dt
 
