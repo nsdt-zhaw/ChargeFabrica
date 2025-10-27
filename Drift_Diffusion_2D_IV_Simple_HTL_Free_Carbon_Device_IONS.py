@@ -286,13 +286,12 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
         else:
             dt = min(MaxTimeStep, dt * 1.05)
 
-        dt_old = dt
-        residual_old = residual
+        dt_old, residual_old = dt, residual
 
         #Update old
         for v in (nlocal, plocal, alocal, clocal, philocal): v.updateOld()
 
-        TotalTime = TotalTime + dt
+        TotalTime += dt
 
         print("Sweep: ", SweepCounter, "TotalTime: ", TotalTime, "Residual: ", residual, "Time for sweep: ", time.time() - t0, "dt: ", dt, "Percentage Improvement: ", PercentageImprovementPerSweep, "Damping: ", DampingFactor)
         SweepCounter += 1
