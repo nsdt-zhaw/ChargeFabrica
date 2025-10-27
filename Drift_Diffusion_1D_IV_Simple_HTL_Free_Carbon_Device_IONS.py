@@ -136,12 +136,13 @@ NdCell = CellVariable(name="Fixed Ionised Donors", mesh=mesh, value=Nd_values)
 NaCell = CellVariable(name="Fixed Ionised Acceptor", mesh=mesh, value=Na_values)
 
 #Here we define the Ohmic boundary conditions
-nTop = map_semiconductor_property(TopLocationSC, 'Nc') * np.exp(((map_semiconductor_property(TopLocationSC, 'chi') - map_electrode_property(TopElectrode, "WF")) / D))
-pTop = map_semiconductor_property(TopLocationSC, 'Nv') * np.exp(((map_electrode_property(TopElectrode, "WF") - (map_semiconductor_property(TopLocationSC, "chi") + map_semiconductor_property(TopLocationSC, "Eg"))) / D))
+def ohmic(sc_slice, electrode_id):
+    nboundary = map_semiconductor_property(sc_slice, 'Nc') * np.exp((map_semiconductor_property(sc_slice, 'chi') - map_electrode_property(electrode_id, "WF")) / D)
+    pboundary = map_semiconductor_property(sc_slice, 'Nv') * np.exp((map_electrode_property(electrode_id, "WF") - (map_semiconductor_property(sc_slice, 'chi') + map_semiconductor_property(sc_slice, 'Eg'))) / D)
+    return nboundary, pboundary
 
-nBottom = map_semiconductor_property(BottomLocationSC, 'Nc') * np.exp(((map_semiconductor_property(BottomLocationSC, 'chi') - map_electrode_property(BottomElectrode, "WF")) / D))
-pBottom = map_semiconductor_property(BottomLocationSC, 'Nv') * np.exp(((map_electrode_property(BottomElectrode, "WF") - (map_semiconductor_property(BottomLocationSC, "chi") +map_semiconductor_property(BottomLocationSC, "Eg"))) / D))
-
+nTop, pTop = ohmic(TopLocationSC, TopElectrode)
+nBottom, pBottom = ohmic(BottomLocationSC, BottomElectrode)
 Vbi = (map_electrode_property(BottomElectrode, "WF") - map_electrode_property(TopElectrode, "WF"))
 
 ############Recombination Constants############
