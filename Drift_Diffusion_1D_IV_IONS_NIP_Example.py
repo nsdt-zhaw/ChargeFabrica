@@ -231,7 +231,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
         EnableIons = True
         if EnableIons:
             #Here the ionic continuity equations are solved
-            residual = eqa.sweep(dt = dt, solver=solver) + eqc.sweep(dt = dt, solver=solver) + residual
+            residual += eqa.sweep(dt = dt, solver=solver) + eqc.sweep(dt = dt, solver=solver)
             alocal.setValue(DampingFactor * alocal.value + (1 - DampingFactor) * alocal.old)
             clocal.setValue(DampingFactor * clocal.value + (1 - DampingFactor) * clocal.old)
 
