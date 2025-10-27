@@ -250,11 +250,11 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     deqc = ((0.00 == -TransientTerm(coeff=q, var=dclocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=dclocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * LUMO_c.faceGrad, var=dclocal)) + ResidualTerm(equation=eqc, underRelaxation=underRelaxation))
     deqpoisson = ((0.00 == -TransientTerm(var=dphilocal) + DiffusionTerm(coeff=epsilon, var=dphilocal) + (q / epsilon_0) * (dplocal - dnlocal + dclocal - dalocal)) + ResidualTerm(equation=eqpoisson, underRelaxation=underRelaxation))
 
-    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_iterations = 1e-7, 1e-6, 1e-10, 0.02, 1, 2000
+    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_timesteps = 1e-7, 1e-6, 1e-10, 0.02, 1, 2000
     residual, residual_old, dt_old, TotalTime, SweepCounter = 1., 1e10, dt, 0.0, 0
-    residualarray = np.zeros(max_iterations)
+    residualarray = np.zeros(max_timesteps)
 
-    while SweepCounter < max_iterations and residual > desired_residual:
+    while SweepCounter < max_timesteps and residual > desired_residual:
 
         t0 = time.time()
 

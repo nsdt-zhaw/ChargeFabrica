@@ -214,10 +214,10 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     eqc2plus = (0.00 == -TransientTerm(coeff=q, var=c2pluslocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=c2pluslocal) + ExponentialConvectionTerm(coeff=2.00 * q * cationmob.harmonicFaceValue * LUMO_c.faceGrad, var=c2pluslocal))
     eqpoisson = (0.00 == -TransientTerm(var=philocal) + DiffusionTerm(coeff=epsilon, var=philocal) + (q/epsilon_0) * (plocal - nlocal + clocal - alocal + 2.00*c2pluslocal - 2.00*a2pluslocal + NdCell - NaCell))
 
-    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_iterations = 1e-9, 1e-6, 1e-10, 0.05, 1, 2000
+    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_timesteps = 1e-9, 1e-6, 1e-10, 0.05, 1, 2000
     residual, residual_old, dt_old, TotalTime, SweepCounter = 1., 1e10, dt, 0.0, 0
 
-    while SweepCounter < max_iterations and residual > desired_residual:
+    while SweepCounter < max_timesteps and residual > desired_residual:
 
         t0 = time.time()
 
