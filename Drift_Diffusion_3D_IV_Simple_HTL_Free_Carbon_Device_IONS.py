@@ -322,11 +322,7 @@ def simulate_device(output_dir):
     def append_to_npy(filename, new_data):
         new_data = np.expand_dims(new_data, axis=0)
         path = os.path.join(output_dir, filename)
-        if os.path.isfile(path):
-            fulldata = np.concatenate((np.load(path), new_data), axis=0)
-        else:
-            fulldata = new_data
-        np.save(path, fulldata)
+        np.save(path, np.concatenate((np.load(path), new_data), axis=0) if os.path.isfile(path) else new_data)
 
     # Process voltages in sequential chunks
     for start in range(0, len(applied_voltages), chunk_size):
