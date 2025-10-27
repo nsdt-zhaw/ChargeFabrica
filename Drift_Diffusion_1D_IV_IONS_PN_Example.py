@@ -184,7 +184,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
         TotalTime = TotalTime + dt
 
-        print("Sweep: ", SweepCounter, "TotalTime: ", TotalTime, "Residual: ", 1.00e-9*residual/dt, "Time for sweep: ", time.time() - t0, "dt: ", dt, "Percentage Improvement: ", PercentageImprovementPerSweep, "Damping: ", DampingFactor)
+        print("Sweep: ", SweepCounter, "TotalTime: ", TotalTime, "Residual: ", residual, "Time for sweep: ", time.time() - t0, "dt: ", dt, "Percentage Improvement: ", PercentageImprovementPerSweep, "Damping: ", DampingFactor)
         SweepCounter += 1
 
     # Here the electron and hole quasi-fermi levels are calculated
