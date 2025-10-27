@@ -209,8 +209,7 @@ niPS = np.sqrt(Nc * Nv * np.exp(-Eg / D))
 
 def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_values):
 
-    solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1) #Works out of the box with simple fipy installation, but slower than pysparse
-    #solver = fipy.solvers.pysparse.linearLUSolver.LinearLUSolver(precon=None, iterations=1) #Very fast solver
+    solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1) #Works out of the box with fipy installation
 
     philocal = CellVariable(name="electrostatic potential", mesh=mesh, value=phi_values, hasOld=True)
     nlocal = CellVariable(name="electron density", mesh=mesh, value=n_values, hasOld=True)
@@ -259,20 +258,18 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
         t0 = time.time()
         for i in range(NumberofSweeps):
             eqpoisson.sweep(dt = dt, solver=solver)
-            philocal.setValue(DampingFactor * philocal.value + (1 - DampingFactor) * philocal.old)  # The potential should be damped BEFORE passing to the continuity equations!
+            philocal.setValue(DampingFactor * philocal + (1 - DampingFactor) * philocal.old) # The potential should be damped BEFORE passing to the continuity equations!
 
             residual = eqn.sweep(dt = dt, solver=solver) + eqp.sweep(dt = dt, solver=solver)
-            nlocal.setValue(np.maximum(nlocal, 1.00e-30))
-            plocal.setValue(np.maximum(plocal, 1.00e-30))
-            nlocal.setValue(DampingFactor * nlocal.value + (1 - DampingFactor) * nlocal.old)
-            plocal.setValue(DampingFactor * plocal.value + (1 - DampingFactor) * plocal.old)
+            nlocal.setValue(DampingFactor * np.maximum(nlocal, 1.00e-30) + (1 - DampingFactor) * nlocal.old)
+            plocal.setValue(DampingFactor * np.maximum(plocal, 1.00e-30) + (1 - DampingFactor) * plocal.old)
 
         EnableIons = True
         if EnableIons:
             #Here the ionic continuity equations are solved
             residual += eqa.sweep(dt = dt, solver=solver) + eqc.sweep(dt = dt, solver=solver)
-            alocal.setValue(DampingFactor * alocal.value + (1 - DampingFactor) * alocal.old)
-            clocal.setValue(DampingFactor * clocal.value + (1 - DampingFactor) * clocal.old)
+            alocal.setValue(DampingFactor * alocal + (1 - DampingFactor) * alocal.old)
+            clocal.setValue(DampingFactor * clocal + (1 - DampingFactor) * clocal.old)
 
         PercentageImprovementPerSweep = (1 - (residual / residual_old) * dt_old / dt) * 100
 
@@ -299,13 +296,10 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
         return [np.reshape(arr, (ny, nx, nz)) for arr in FipyFlattenedArray]
 
     #Here the electron and hole current densities are calculated
-    Jn = (q * nmob.globalValue * nlocal.globalValue * -psinvar.grad.globalValue) #Vector Quantity
-    Jp = (q * pmob.globalValue * plocal.globalValue * -psipvar.grad.globalValue) #Vector Quantity
-    E = -philocal.grad  #Vector Quantity
-
-    Jn_Matrix = np.reshape(Jn, (Jn.shape[0], ny, nx, nz))
-    Jp_Matrix = np.reshape(Jp, (Jp.shape[0], ny, nx, nz))
-    Efield_matrix = np.reshape(E.globalValue, (E.shape[0], ny, nx, nz))
+    E = -philocal.grad.globalValue
+    Jn = (q * nmob.globalValue * nlocal.globalValue * -psinvar.grad.globalValue)
+    Jp = (q * pmob.globalValue * plocal.globalValue * -psipvar.grad.globalValue)
+    Jn_Matrix, Jp_Matrix, Efield_matrix = [np.reshape(X, (X.shape[0], ny, nx)) for X in (Jn, Jp, E)]
 
     (PotentialMatrix, GenValues_Matrix, RecombinationMatrix, Recombination_Bimolecular_EQMatrix, NMatrix, PMatrix, chiMatrix, EgMatrix, psinvarmatrix, psipvarmatrix) = reshapefunction([philocal, gen_rate, Recombination_Combined, Recombination_Bimolecular_EQ, nlocal, plocal, ChiCell, EgCell, psinvar, psipvar])
 
