@@ -321,7 +321,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
 def simulate_device(output_dir):
 
-    applied_voltages = np.arange(0.0, 1.25, 0.025)
+    applied_voltages = np.arange(0.0, 1.15, 0.05)
 
     if len(applied_voltages) < multiprocessing.cpu_count() - 1:
         chunk_size = len(applied_voltages)
