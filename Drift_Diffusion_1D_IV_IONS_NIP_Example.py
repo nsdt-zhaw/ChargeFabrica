@@ -64,8 +64,8 @@ DeviceArchitechture[50:450,:] = PS_ID #400nm PS Absorber
 DeviceArchitechture[450:500,:] = TiO2_ID #50nm TiO2 ETL
 
 TopElectrode = FTO_ID
-TopLocationSC = DeviceArchitechture[-1,:] #Semiconducting materials adjacent to the top electrode
-BottomLocationSC = DeviceArchitechture[0,:] #Semiconducting materials adjacent to the bottom electrode
+TopLocationSC = DeviceArchitechture[-1,:].flatten() #Semiconducting materials adjacent to the top electrode
+BottomLocationSC = DeviceArchitechture[0,:].flatten() #Semiconducting materials adjacent to the bottom electrode
 BottomElectrode = Gold_ID
 
 EffectiveMediumApproximationVolumeFraction = 1.00

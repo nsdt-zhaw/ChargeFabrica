@@ -64,8 +64,8 @@ DeviceArchitechture[0:50,:] = C60_ID #50nm C60 ETL
 DeviceArchitechture[50:500,:] = PS_ID #450nm PS Absorber
 
 TopElectrode = ITO2_ID
-TopLocationSC = DeviceArchitechture[-1,:] #Semiconducting materials adjacent to the top electrode
-BottomLocationSC = DeviceArchitechture[0,:] #Semiconducting materials adjacent to the bottom electrode
+TopLocationSC = DeviceArchitechture[-1,:].flatten() #Semiconducting materials adjacent to the top electrode
+BottomLocationSC = DeviceArchitechture[0,:].flatten() #Semiconducting materials adjacent to the bottom electrode
 BottomElectrode = Ag_ID
 
 SAMWFModifier = 0.6 #Self-assembled monolayer workfunction modifier in eV

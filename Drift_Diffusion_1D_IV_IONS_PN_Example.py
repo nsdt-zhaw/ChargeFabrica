@@ -47,8 +47,8 @@ DeviceArchitechture = np.empty((3000, 1))
 DeviceArchitechture[0:1000,:] = Si_NaDoping_ID
 DeviceArchitechture[1000:3000,:] = Si_NdDoping_ID
 
-TopLocationSC = DeviceArchitechture[-1,:] #Semiconducting materials adjacent to the top electrode
-BottomLocationSC = DeviceArchitechture[0,:] #Semiconducting materials adjacent to the bottom electrode
+TopLocationSC = DeviceArchitechture[-1,:].flatten() #Semiconducting materials adjacent to the top electrode
+BottomLocationSC = DeviceArchitechture[0,:].flatten() #Semiconducting materials adjacent to the bottom electrode
 
 EffectiveMediumApproximationVolumeFraction = 1.00
 GenRate_values_default = map_semiconductor_property(DeviceArchitechture, 'GenRate') #Binary array for whether generation is enabled or not
