@@ -1,7 +1,7 @@
 # ChargeFabrica
 A Python-based Finite Difference Multi-dimensional Electro-ionic Drift Diffusion Simulator for Perovskite Solar Cells 
 
-<img src="https://github.com/user-attachments/assets/8fefefaf-dfd4-4be8-8c48-8add559b91da" width="200" alt="DOI" data-canonical-src="" style="max-width: 1%;">
+<img src="https://github.com/user-attachments/assets/8fefefaf-dfd4-4be8-8c48-8add559b91da" width="200" alt="DOI 10.1088/2752-5724/ae27e9" data-canonical-src="https://iopscience.iop.org/article/10.1088/2752-5724/ae27e9" style="max-width: 1%;">
 
 Authors: Tristan Sachsenweger, Miguel A. Torre Cachafeiro, Wolfgang Tress
 
