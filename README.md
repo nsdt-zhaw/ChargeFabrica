@@ -10,8 +10,9 @@ Authors: Tristan Sachsenweger, Miguel A. Torre Cachafeiro, Wolfgang Tress
 2. [Installation](#installation)
 3. [QuickStart](#quickstart)
 4. [Computation Time](#computation-time)
-5. [Numerics and Damping](#numerics-and-damping)
-6. [How to cite](#how-to-cite)
+5. [Units and Formatting](#units-and-formatting)
+6. [Numerics and Damping](#numerics-and-damping)
+7. [How to cite](#how-to-cite)
 
 ## Introduction
 ChargeFabrica uses [fipy](https://github.com/usnistgov/fipy) to solve the semiconductor equations in 1D, 2D or 3D, thereby determining the electrostatic potential, charge density distributions for electrons, holes and mobile ions and the resulting current-voltage relationships. Furthermore, Beer–Lambert generation, various recombination mechanisms, and PL Yield can be modelled. The solver is designed to handle arbitrary semiconductor geometries which can be defined within a numpy array.
@@ -54,6 +55,49 @@ The 1D compute time with ions enabled on a Intel(R) Core(TM) i9-12900 desktop PC
 The 2D compute time with ions enabled on a dedicated server with AMD EPYC 74F3 processor for ~100k elements is roughly 2 hours.
 
 It is therefore **strongly** recommended to test the code in 1D before moving to 2D.
+
+## Units and Formatting
+For the semiconductors, the units are defined as follows:
+
+name: uniquename
+
+GenRate: prefactor in suns (unitless)
+
+epsilon: relative permittivity (unitless)
+
+pmob: hole mobility (m^2/Vs)
+
+nmob: electron mobility (m^2/Vs)
+
+Eg: band gap (eV)
+
+chi: electron affinity (eV)
+
+cationmob: cation mobility (m^2/Vs)
+
+anionmob: anion mobility (m^2/Vs)
+
+Recombination_Langevin: prefactor to enable Langevin recombination (unitless)
+
+Recombination_Bimolecular: prefactor to enable bimolecular recombination (unitless)
+
+Nc: effective density of states in the conduction band (1/m^3)
+
+Nv: effective density of states in the valence band (1/m^3)
+
+Chi_a: anionic energetic offset (eV)
+
+Chi_c: cationic energetic offset (eV)
+
+a_initial_level: initial mobile anion density (1/m^3)
+
+c_initial_level: initial mobile cation density (1/m^3)
+
+Nd: donor density (1/m^3)
+
+Na: acceptor density (1/m^3)
+
+For the electrodes, the work function must be provided (in eV)
 
 ## Numerics and Damping
 Drift-Diffusion problems can be quite challenging to solve numerically, depending on the material parameters used and the geometry employed.
