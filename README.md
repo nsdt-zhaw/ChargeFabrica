@@ -79,7 +79,7 @@ anionmob: anion mobility (m^2/Vs)
 
 Recombination_Langevin: prefactor to enable Langevin recombination (unitless)
 
-Recombination_Bimolecular: prefactor to enable bimolecular recombination (unitless)
+Recombination_Bimolecular: bimolecular recombination prefactor (m^3/s)
 
 Nc: effective density of states in the conduction band (1/m^3)
 
