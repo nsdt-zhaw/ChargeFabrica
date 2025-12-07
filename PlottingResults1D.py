@@ -92,7 +92,7 @@ if len(applied_voltages) > 3:
     fig2, ax2 = plt.subplots()
     ax2.plot(applied_voltages, JTotal_Y_mean)
     ax2.set_xlabel("Applied Voltage (V)")
-    ax2.set_ylabel("Current Density (A/m^2)")
+    ax2.set_ylabel("Current Density (A/$\mathrm{m^2}$)")
     ax2.set_title("IV Curve")
     ax2.axvline(max_power_voltage, color='r', linestyle='--')
     ax2.axhline(max_power_current, color='r', linestyle='--')
@@ -111,7 +111,7 @@ PotentialMatrix = np.expand_dims(PotentialMatrix, axis=2)
 LUMO = PotentialMatrix + ChiMatrix
 HOMO = PotentialMatrix + ChiMatrix + EgMatrix
 
-titles = ['EField Strength (V/m)', 'Generation Rate (1/m3)', 'Potential (V)', 'Recombination (1/m3)', 'PLYield (-)']
+titles = ['EField Strength (V/m)', 'Generation Rate (1/$\mathrm{m^3}$)', 'Potential (V)', 'Recombination (1/$\mathrm{m^3}$)', 'PLYield (-)']
 data_matrices = [EField_matrix, GenerationMatrix, PotentialMatrix, RecombinationMatrix, PLYield]
 num_plots = len(data_matrices)
 
@@ -142,7 +142,7 @@ def update(val):
         axs[i].clear()
         axs[i].plot(matrix[frame])
         axs[i].set_title("{} at {:.3f} V".format(titles[i], applied_voltages[frame]))
-        if titles[i] == "Recombination (1/m3)":
+        if titles[i] == "Recombination (1/$\mathrm{m^3}$)":
             axs[i].set_yscale("log")
             axs[i].set_ylim(1.00e24, 1.00e29)
         axs[i].invert_xaxis()
@@ -162,7 +162,7 @@ def update(val):
     axs[-2].plot(JTotal_Y[frame][5:-5], "g")
     axs[-2].set_ylim(-300, 500)
     axs[-2].legend(["Electron Current", "Hole Current", "Total Current"])
-    axs[-2].set_title("Current Density (A/m2)")
+    axs[-2].set_title("Current Density (A/$\mathrm{m^2}$)")
     axs[-2].invert_xaxis()
     axs[-3].clear()
     axs[-3].plot(NMatrix[frame][:], "r")
@@ -179,7 +179,7 @@ def update(val):
     max_y = max(max_anion, max_cation, max_electron, max_hole)
     axs[-3].set_ylim(1.00e5,max_y*10)
     axs[-3].legend(["Electron", "Hole", "Anion", "Cation"])
-    axs[-3].set_title("Charge Carrier Distribution (1/m3)")
+    axs[-3].set_title("Charge Carrier Distribution (1/$\mathrm{m^3}$)")
     axs[-3].invert_xaxis()
     fig.canvas.draw_idle()
 
