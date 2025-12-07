@@ -63,8 +63,8 @@ CationDensityMatrix = np.load(Simulation_folder + "CationDensityMatrix.npy")[:]
 JTotal_Y_mean = np.median(JTotal_Y[:,100:-100,:], axis=(1, 2))
 
 titles = ['EField_matrix', 'PMatrix', 'Generation Rate', 'JTotal_Y', 'PotentialMatrix', 'NMatrix', 'RecombinationMatrix', "Joule Heating", "Anion Density", "Cation Density"]
-print "JTotal_Y_mean shape: ", JTotal_Y_mean.shape
-print "applied_voltages shape: ", applied_voltages.shape
+print("JTotal_Y_mean shape: ", JTotal_Y_mean.shape)
+print("applied_voltages shape: ", applied_voltages.shape)
 
 if len(applied_voltages) > 3:
     # Interpolate JTotal_Y_mean over a larger set of voltages
@@ -83,14 +83,13 @@ if len(applied_voltages) > 3:
     MaxPowerIn = NumberOfSuns * 1000
     Efficiency = (PINCHECK * MaxPowerOut/MaxPowerIn)*100
 
-    print "Maximum power point: {:.3f} V, {:.3f} A/m^2".format(max_power_voltage, max_power_current)
-    print "Efficiency: {:.3f}".format(Efficiency)
-    print "Voc: {:.3f} V".format(Voc)
-    #print "Jsc: {:.3f} A/m^2".format(Jsc)
-    #print "Fill Factor: ", (MaxPowerOut/(Voc*Jsc))*100
+    print("Maximum power point: {:.3f} V, {:.3f} A/m^2".format(max_power_voltage, max_power_current))
+    print("Efficiency: {:.3f}".format(Efficiency))
+    print("Voc: {:.3f} V".format(Voc))
+    #print("Jsc: {:.3f} A/m^2".format(Jsc))
+    #print("Fill Factor: ", (MaxPowerOut/(Voc*Jsc))*100)
 
     fig2, ax2 = plt.subplots()
-    #ax2.plot(voltage_fine, JTotal_Y_fine)
     ax2.plot(applied_voltages, JTotal_Y_mean)
     ax2.set_xlabel("Applied Voltage (V)")
     ax2.set_ylabel("Current Density (A/m^2)")
