@@ -314,9 +314,9 @@ def simulate_device(output_dir):
             fulldata = new_data
         np.save(path, fulldata)
 
-    # Process voltages in sequential chunks
+    # Process wavelengths in sequential chunks
     for start in range(0, len(Tested_Wavelengths), chunk_size):
-        # Create a chunk of voltages to simulate in parallel
+        # Create a chunk of wavelengths to simulate in parallel
         chunk_wavelengths = Tested_Wavelengths[start:start + chunk_size]
         print("Chunk Wavelengths: ", chunk_wavelengths)
 
@@ -406,4 +406,5 @@ def main_workflow():
 
 # Fix for multiprocessing on Windows
 if __name__ == '__main__':
+
     main_workflow()
