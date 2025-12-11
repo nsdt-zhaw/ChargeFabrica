@@ -30,8 +30,7 @@ ChargeFabrica uses [fipy](https://github.com/usnistgov/fipy) to solve the semico
   
   ---
   <img height="250" alt="image" src="https://github.com/user-attachments/assets/6e9a66e9-aa1e-49d2-8d65-5dbf7aff0128" />
-  <img height="250" alt="image" src="https://github.com/user-attachments/assets/2a5f4e05-6355-40be-886c-39e697ffbee9" />
-
+  <img height="250" alt="image" src="https://github.com/user-attachments/assets/4594abeb-013a-4853-aa4d-bb2e6532e6bb" />
 
 -   2D Simulation plot for carbon-based triple mesoscopic HTL-free device: FTO (Boundary)|TiO2 (50 nm)|m-TiO2/MAPbI3 (150 nm)|m-ZrO2/MAPbI3 (1000 nm)|MAPbI3 (100 nm)|Carbon (Boundary) Cell
 
