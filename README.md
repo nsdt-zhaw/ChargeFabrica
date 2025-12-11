@@ -104,6 +104,8 @@ Drift-Diffusion problems can be quite challenging to solve numerically, dependin
 
 If the desired residual isn't achieved due to frequent residual instabilities, then the DampingFactor ratio must be decreased. This comes at a cost of decreasing the effective time step, which often requires increasing the number of iterations necessary for convergence.
 
+The Newton method can greatly accelerate convergence with the correct DampingFactor. However, it is more susceptible to instabilities than the Gummel method if the wrong DampingFactor is chosen (The Gummel method is more tolerant in this regard). Furthermore, for some problems, high bias voltages cannot be directly solved using Newton's method without a good initial guess, which can be fixed by reducing the multiprocessing chunk_size variable to (4-8), thereby allowing the bias voltage to be slowly stepped up with the previous highest-bias solution acting as the initial guess for the next chunk.
+
 **Note:** The residual may increase briefly for certain problems as the timestep is being dynamically increased. This usually does not require an adjustment of the DampingFactor.
 For very stiff problems, it may be necessary to sweep the Poisson and electronic continuity equations multiple times per time step. However, the computational overhead of sweeping is very significant, and it is usually better to adjust the DampingFactor.
 
