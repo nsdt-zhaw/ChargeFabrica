@@ -15,7 +15,8 @@ Authors: Tristan Sachsenweger, Miguel A. Torre Cachafeiro, Wolfgang Tress
 7. [How to cite](#how-to-cite)
 
 ## Introduction
-ChargeFabrica uses [fipy](https://github.com/usnistgov/fipy) to solve the semiconductor equations in 1D, 2D or 3D, thereby determining the electrostatic potential, charge density distributions for electrons, holes and mobile ions and the resulting current-voltage relationships. Furthermore, Beer–Lambert generation, various recombination mechanisms, and PL Yield can be modelled. The solver is designed to handle arbitrary semiconductor geometries which can be defined within a numpy array.
+ChargeFabrica uses [fipy](https://github.com/usnistgov/fipy) to solve the semiconductor equations in 1D, 2D or 3D, thereby determining the electrostatic potential, charge density distributions for electrons, holes and mobile ions and the resulting current-voltage relationships. Furthermore, Beer–Lambert generation, various recombination mechanisms, PL Yield, EQE and ion preconditioning can be modelled. The solver is designed to handle arbitrary semiconductor geometries, which can be defined within a numpy array.
+
 ### Example Problems:
 <div class="grid cards" markdown>
 
