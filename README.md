@@ -44,7 +44,7 @@ ChargeFabrica requires the following packages to be installed: [numpy](https://g
 
 The prerequisite packages can be installed using pip: 
 ```console
-pip install numpy scipy fipy==3.4.5 pandas joblib xlrd matplotlib
+pip install numpy scipy fipy pandas joblib xlrd matplotlib
 ```
 The ChargeFabrica repo can then be cloned using the command:
 ```console
