@@ -156,7 +156,7 @@ niPS = np.sqrt(Nc * Nv * np.exp(-Eg / D))
 
 def solve_for_wavelength(voltage, n_values, p_values, a_values, c_values, phi_values, GenRate_values_default):
 
-    solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1) #Works out of the box with simple fipy installation, but slower than pysparse
+    solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1, tolerance=1e-10) #Works out of the box with simple fipy installation, but slower than pysparse
 
     philocal = CellVariable(name="electrostatic potential", mesh=mesh, value=phi_values, hasOld=True)
     nlocal = CellVariable(name="electron density", mesh=mesh, value=n_values, hasOld=True)
@@ -408,3 +408,4 @@ def main_workflow():
 if __name__ == '__main__':
 
     main_workflow()
+
