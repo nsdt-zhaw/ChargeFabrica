@@ -109,7 +109,7 @@ Vbi = D*np.log(1.00e22*1.00e23/(niPSmax*niPSmax))
 
 def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_values):
 
-    solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1) #Works out of the box with fipy installation
+    solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1, tolerance=1e-10) #Works out of the box with fipy installation
 
     philocal = CellVariable(name="electrostatic potential", mesh=mesh, value=phi_values, hasOld=True)
     nlocal = CellVariable(name="electron density", mesh=mesh, value=n_values, hasOld=True)
@@ -258,4 +258,5 @@ def main_workflow():
 
 # Fix for multiprocessing on Windows
 if __name__ == '__main__':
+
     main_workflow()
