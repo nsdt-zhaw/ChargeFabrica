@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-#Plotting code for Spacial Collection Efficiency (SCE) calculation from 1D drift-diffusion simulation data
+#Plotting code for Spatial Collection Efficiency (SCE) calculation from 1D drift-diffusion simulation data
 Simulation_folder = "./Outputs/1D_NIP_SCE_Example/VoltageSweep/"
 
 GenValues_Matrix_default = np.load(Simulation_folder + "GenValues_Matrix.npy")[0]
@@ -90,5 +90,6 @@ plt.ylim(0, np.max(GenValues_Matrix_mean_default)*1.1)
 plt.legend(loc='upper right')
 #Set dpi to 300
 plt.savefig("Final_SCE_vs_Position.pdf", dpi=300, bbox_inches='tight')
+
 
 plt.show()
