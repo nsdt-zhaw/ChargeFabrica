@@ -171,7 +171,7 @@ niPS = np.sqrt(Nc * Nv * np.exp(-Eg / D))
 
 def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_values):
 
-    solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1) #Works out of the box with fipy installation
+    solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1, tolerance=1.00e-10) #Works out of the box with fipy installation
 
     philocal = CellVariable(name="electrostatic potential", mesh=mesh, value=phi_values, hasOld=True)
     nlocal = CellVariable(name="electron density", mesh=mesh, value=n_values, hasOld=True)
