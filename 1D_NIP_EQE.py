@@ -10,20 +10,15 @@ from fipy import CellVariable, TransientTerm, DiffusionTerm, ExponentialConvecti
 import fipy
 from fipy.tools import numerix
 import time
-import pandas as pd
 from scipy.ndimage import zoom
-from scipy import constants
 from SmoothingFunction import flatten_and_smooth_all
 from joblib import Parallel, delayed
 import multiprocessing
-from material_maps import Semiconductors, Electrodes
 import copy
-
-TInfinite = 300.0
-(q, epsilon_0, D) = (constants.electron_volt, constants.epsilon_0, (constants.Boltzmann * TInfinite) / constants.electron_volt)
-
-name_to_code_SC = {mat.name: mat.code for mat in Semiconductors.values()}
-name_to_code_EL = {mat.name: mat.code for mat in Electrodes.values()}
+from material_maps import Semiconductors, Electrodes, map_semiconductor_property, map_electrode_property, map_props, name_to_code_SC, name_to_code_EL
+from BoundaryConditions import ohmic
+from constantsfile import TInfinite, q, epsilon_0, D
+from LoadSolarSpectrum import SolarSpectrumWavelength, SolarSpectrumIrradiance
 
 Gold_ID = name_to_code_EL["Gold"]
 Spiro_ID = name_to_code_SC["Spiro"]
@@ -31,26 +26,11 @@ PS_ID = name_to_code_SC["PS"]
 TiO2_ID = name_to_code_SC["mTiO2_2"]
 FTO_ID = name_to_code_EL["FTO2"]
 
-def map_semiconductor_property(devarray, prop):
-    return np.vectorize(lambda x: getattr(Semiconductors[x], prop))(devarray)
-
-def map_electrode_property(devarray, prop):
-    return np.vectorize(lambda x: getattr(Electrodes[x], prop))(devarray)
-
-def map_props(arr, props, table):
-    getter = np.vectorize(lambda x, p: getattr(table[x], p))
-    return [getter(arr, p) for p in props]
-
 StretchFactor = 1 #Can help convergence if a finer mesh is needed
 SmoothFactor = 0.2 #Some smoothing helps with convergence
 
 dx = 1.00e-9/StretchFactor #Pixel Width in meters
 dy = 1.00e-9/StretchFactor #Pixel Width in meters
-
-data = pd.read_excel('./Solar_Spectrum.xls', skiprows=2)
-grouped = data.groupby(data.iloc[:,0].round().astype(int)).mean()
-SolarSpectrumWavelength = grouped.index.values
-SolarSpectrumIrradiance = grouped.iloc[:, 2].values
 
 #Importing Absorbance Coefficient Spectrum for MAPbI3
 AbsorptionData = np.genfromtxt("MAPI_tailfit_nk 1.txt", delimiter=",", skip_header=1)
@@ -124,13 +104,8 @@ EgCell = CellVariable(name="Band Gap", mesh=mesh, value=Eg)
 NdCell = CellVariable(name="Fixed Ionised Donors", mesh=mesh, value=Nd_values)
 NaCell = CellVariable(name="Fixed Ionised Acceptor", mesh=mesh, value=Na_values)
 
-#Here we define the Ohmic boundary conditions
-nTop = map_semiconductor_property(TopLocationSC, 'Nc') * np.exp(((map_semiconductor_property(TopLocationSC, 'chi') - map_electrode_property(TopElectrode, "WF")) / D))
-pTop = map_semiconductor_property(TopLocationSC, 'Nv') * np.exp(((map_electrode_property(TopElectrode, "WF") - (map_semiconductor_property(TopLocationSC, "chi") + map_semiconductor_property(TopLocationSC, "Eg"))) / D))
-
-nBottom = map_semiconductor_property(BottomLocationSC, 'Nc') * np.exp(((map_semiconductor_property(BottomLocationSC, 'chi') - map_electrode_property(BottomElectrode, "WF")) / D))
-pBottom = map_semiconductor_property(BottomLocationSC, 'Nv') * np.exp(((map_electrode_property(BottomElectrode, "WF") - (map_semiconductor_property(BottomLocationSC, "chi") +map_semiconductor_property(BottomLocationSC, "Eg"))) / D))
-
+nTop, pTop = ohmic(TopLocationSC, TopElectrode)
+nBottom, pBottom = ohmic(BottomLocationSC, BottomElectrode)
 Vbi = (map_electrode_property(BottomElectrode, "WF") - map_electrode_property(TopElectrode, "WF"))
 
 ############Recombination Constants############
@@ -272,21 +247,15 @@ def solve_for_wavelength(voltage, n_values, p_values, a_values, c_values, phi_va
     psinvar = LUMO - D * (numerix.log(nlocal) - LogNcCell)
     psipvar = HOMO + D * (numerix.log(plocal) - LogNvCell)
 
-    def reshapefunction(FipyFlattenedArray):
-        return [np.reshape(arr, (ny, nx)) for arr in FipyFlattenedArray]
-
     #Here the electron and hole current densities are calculated
     Jn = (q * nmob.globalValue * nlocal.globalValue * -psinvar.grad.globalValue) #Vector Quantity
     Jp = (q * pmob.globalValue * plocal.globalValue * -psipvar.grad.globalValue) #Vector Quantity
     E = -philocal.grad  #Vector Quantity
 
-    Jn_Matrix = np.reshape(Jn, (Jn.shape[0], ny, nx))
-    Jp_Matrix = np.reshape(Jp, (Jp.shape[0], ny, nx))
-    Efield_matrix = np.reshape(E.globalValue, (E.shape[0], ny, nx))
+    Jn_Matrix, Jp_Matrix, Efield_matrix = [np.reshape(X, (X.shape[0], ny, nx)) for X in (Jn, Jp, E)]
+    (PotentialMatrix, GenValues_Matrix, RecombinationMatrix, Recombination_Bimolecular_EQMatrix, NMatrix, PMatrix, chiMatrix, EgMatrix, psinvarmatrix, psipvarmatrix) = [np.reshape(arr,(ny, nx)) for arr in (philocal, gen_rate, Recombination_Combined, Recombination_Bimolecular_EQ, nlocal, plocal, ChiCell, EgCell, psinvar, psipvar)]
 
-    (PotentialMatrix, GenValues_Matrix, RecombinationMatrix, Recombination_Bimolecular_EQMatrix, NMatrix, PMatrix, chiMatrix, EgMatrix, psinvarmatrix, psipvarmatrix) = reshapefunction([philocal, gen_rate, Recombination_Combined, Recombination_Bimolecular_EQ, nlocal, plocal, ChiCell, EgCell, psinvar, psipvar])
-
-    return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue, "p": plocal.globalValue, "phi": philocal.globalValue, "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue, "CationDensityMatrix": clocal.globalValue, "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Jn_Matrix": Jn_Matrix, "Jp_Matrix": Jp_Matrix, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix}
+    return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue, "p": plocal.globalValue, "phi": philocal.globalValue, "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue, "CationDensityMatrix": clocal.globalValue, "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Jn_Matrix": Jn_Matrix, "Jp_Matrix": Jp_Matrix, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix, "residualarray": residualarray}
 
 def simulate_device(output_dir):
 
@@ -296,7 +265,6 @@ def simulate_device(output_dir):
 
     print("Tested Wavelengths: ", Tested_Wavelengths)
 
-    # if len(applied_voltages) < chunk_size:
     chunk_size = len(Tested_Wavelengths)
 
     n_values = 0.00

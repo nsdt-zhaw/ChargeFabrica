@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-#This code is a simulation of a HTL-free perovskite solar cell using the finite volume method with the FiPy library.
-#Device architecture: FTO (Boundary)|TiO2 (50 nm)|MAPbI3 (1600 nm)|Carbon (Boundary)
+#This code is a simulation of a 2D carbon-based triple mesoscopic HTL-free device using the finite volume method with the FiPy library.
+#Device architecture: FTO (Boundary)|TiO2 (50 nm)|m-TiO2/MAPbI3 (150 nm)|m-ZrO2.txt/MAPbI3 (1000 nm)|MAPbI3 (100 nm)|Carbon (Boundary)
 #The solver uses the Newton method to accelerate convergence.
 import os
 os.environ["OMP_NUM_THREADS"] = "1" #Really important! Pysparse doesnt benefit from multithreading.
@@ -15,6 +15,7 @@ from scipy.ndimage import zoom
 from SmoothingFunction import flatten_and_smooth_all
 from joblib import Parallel, delayed
 import multiprocessing
+from material_maps import Semiconductors, Electrodes
 import copy
 from material_maps import Semiconductors, Electrodes, map_semiconductor_property, map_electrode_property, map_props, name_to_code_SC, name_to_code_EL
 from BoundaryConditions import ohmic
@@ -39,9 +40,54 @@ kdata = AbsorptionData[:, 2]
 alphadata = 4 * np.pi * kdata / (AbsorptionData[:, 0] * 1.00e-9)
 
 ######Define Device Architecture
-DeviceArchitechture = np.empty((1650, 1))
-DeviceArchitechture[0:1600,:] = PS_ID #1600nm PS Absorber
-DeviceArchitechture[1600:1650,:] = TiO2_ID #50nm TiO2 ETL
+######Define 2D Device Architecture
+ZirconiaLength = 1000 #1000nm of m-ZrO2.txt
+MesoLength = 1150 #1150nm of m-TiO2 + m-ZrO2.txt
+
+# Initialize array parameters for the sinosoidal structure
+SinusoidalArray = np.ones((MesoLength, 100), dtype=int) * PS_ID  # You can modify shape
+Amplitude = 20
+dwidth = 35
+desired_wavelength = 60  # explicitly set wavelength (the length of one full sine wave period)
+phase = 0  # fixed phase to start from the top of the sine wave
+
+# Compute Frequency based on desired fixed wavelength
+Frequency = SinusoidalArray.shape[0] / desired_wavelength
+
+# Calculate the vertical coordinate
+y_coords = np.arange(SinusoidalArray.shape[0])
+
+# Calculate horizontal positions for the sine wave:
+center_x = SinusoidalArray.shape[1] // 2
+
+x_positions = center_x + (Amplitude * np.sin(2 * np.pi * Frequency * y_coords / SinusoidalArray.shape[0] + phase)).astype(int)
+
+# Insert sine wave into your SinusoidalArray
+for dyyy in range(0, MesoLength-ZirconiaLength):
+    xpos = x_positions[dyyy]
+
+    x_start = max(xpos - dwidth // 2, 0)
+    x_end = min(xpos + dwidth // 2 + 1, SinusoidalArray.shape[1])  # +1 to include endpoint
+
+    SinusoidalArray[dyyy, x_start:x_end] = TiO2_ID
+
+# Insert sine wave into your SinusoidalArray
+for dyyy in range(MesoLength-ZirconiaLength, MesoLength):
+    xpos = x_positions[dyyy]
+
+    x_start = max(xpos - dwidth // 2, 0)
+    x_end = min(xpos + dwidth // 2 + 1, SinusoidalArray.shape[1])  # +1 to include endpoint
+
+    SinusoidalArray[dyyy, x_start:x_end] = ZrO2_ID
+
+#flip the SinusoidalArray
+SinusoidalArray = np.flip(SinusoidalArray, axis=0)
+
+DeviceArchitechture = np.empty((MesoLength + 150, 100))
+
+DeviceArchitechture[0:100,:] = PS_ID
+DeviceArchitechture[100:MesoLength+100,:] = SinusoidalArray
+DeviceArchitechture[(MesoLength+100):(MesoLength + 150),:] = TiO2_ID
 
 TopElectrode = FTO_ID
 TopLocationSC = DeviceArchitechture[-1,:].flatten() #Semiconducting materials adjacent to the top electrode
@@ -119,7 +165,6 @@ NaCell = CellVariable(name="Fixed Ionised Acceptor", mesh=mesh, value=Na_values)
 
 nTop, pTop = ohmic(TopLocationSC, TopElectrode)
 nBottom, pBottom = ohmic(BottomLocationSC, BottomElectrode)
-
 Vbi = (map_electrode_property(BottomElectrode, "WF") - map_electrode_property(TopElectrode, "WF"))
 
 ############Recombination Constants############
@@ -206,7 +251,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     deqc = ((0.00 == -TransientTerm(coeff=q, var=dclocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=dclocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * LUMO_c.faceGrad, var=dclocal)) + ResidualTerm(equation=eqc, underRelaxation=underRelaxation))
     deqpoisson = ((0.00 == -TransientTerm(var=dphilocal) + DiffusionTerm(coeff=epsilon, var=dphilocal) + (q / epsilon_0) * (dplocal - dnlocal + dclocal - dalocal)) + ResidualTerm(equation=eqpoisson, underRelaxation=underRelaxation))
 
-    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_timesteps = 1e-8, 1e-6, 1e-10, 0.02, 1, 2000
+    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_timesteps = 1e-8, 1e-7, 1e-10, 0.02, 1, 2000
     residual, residual_old, dt_old, TotalTime, SweepCounter = 1., 1e10, dt, 0.0, 0
     residualarray = np.zeros(max_timesteps)
 
@@ -214,37 +259,25 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
         t0 = time.time()
 
+        EnableIons = True
+
         for i in range(NumberofSweeps):
-            EnableIons = True
-            if residual > 1.00e-6:
-                eqpoisson.sweep(dt=dt, solver=solver)
-                philocal.setValue(DampingFactor * philocal + (1 - DampingFactor) * philocal.old)  # The potential should be damped BEFORE passing to the continuity equations!
+            deqpoisson.sweep(dt=dt, solver=solver)
+            philocal.value = philocal.value + dphilocal.value
+            philocal.setValue(DampingFactor * philocal + (1 - DampingFactor) * philocal.old)  # The potential should be damped BEFORE passing to the continuity equations!
 
-                residual = eqn.sweep(dt=dt, solver=solver) + eqp.sweep(dt=dt, solver=solver)
-                nlocal.setValue(DampingFactor * np.maximum(nlocal, 1.00e-30) + (1 - DampingFactor) * nlocal.old)
-                plocal.setValue(DampingFactor * np.maximum(plocal, 1.00e-30) + (1 - DampingFactor) * plocal.old)
+            residual = deqn.sweep(dt=dt, solver=solver) + deqp.sweep(dt=dt, solver=solver)
+            nlocal.value = nlocal.value + dnlocal.value
+            plocal.value = plocal.value + dplocal.value
+            nlocal.setValue(DampingFactor * np.maximum(nlocal, 1.00e-30) + (1 - DampingFactor) * nlocal.old)
+            plocal.setValue(DampingFactor * np.maximum(plocal, 1.00e-30) + (1 - DampingFactor) * plocal.old)
 
-                if EnableIons:
-                    residual += eqa.sweep(dt=dt, solver=solver) + eqc.sweep(dt=dt, solver=solver)
-                    alocal.setValue(DampingFactor * alocal + (1 - DampingFactor) * alocal.old)
-                    clocal.setValue(DampingFactor * clocal + (1 - DampingFactor) * clocal.old)
-            else:
-                deqpoisson.sweep(dt=dt, solver=solver)
-                philocal.value = philocal.value + dphilocal.value
-                philocal.setValue(DampingFactor * philocal + (1 - DampingFactor) * philocal.old)  # The potential should be damped BEFORE passing to the continuity equations!
-
-                residual = deqn.sweep(dt=dt, solver=solver) + deqp.sweep(dt=dt, solver=solver)
-                nlocal.value = nlocal.value + dnlocal.value
-                plocal.value = plocal.value + dplocal.value
-                nlocal.setValue(DampingFactor * np.maximum(nlocal, 1.00e-30) + (1 - DampingFactor) * nlocal.old)
-                plocal.setValue(DampingFactor * np.maximum(plocal, 1.00e-30) + (1 - DampingFactor) * plocal.old)
-
-                if EnableIons:
-                    residual += deqa.sweep(dt=dt, solver=solver) + deqc.sweep(dt=dt, solver=solver)
-                    alocal.value = alocal.value + dalocal.value
-                    clocal.value = clocal.value + dclocal.value
-                    alocal.setValue(DampingFactor * alocal + (1 - DampingFactor) * alocal.old)
-                    clocal.setValue(DampingFactor * clocal + (1 - DampingFactor) * clocal.old)
+            if EnableIons:
+                residual += deqa.sweep(dt=dt/10, solver=solver) + deqc.sweep(dt=dt/10, solver=solver)
+                alocal.value = alocal.value + dalocal.value
+                clocal.value = clocal.value + dclocal.value
+                alocal.setValue(DampingFactor * alocal + (1 - DampingFactor) * alocal.old)
+                clocal.setValue(DampingFactor * clocal + (1 - DampingFactor) * clocal.old)
 
         residualarray[SweepCounter] = residual
 
@@ -253,7 +286,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
         if residual > residual_old * 1.2:
             dt = max(1.00e-8, dt * 0.1)
         else:
-            dt = min(MaxTimeStep, dt * 1.05)
+            dt = min(MaxTimeStep, dt * 1.02)
 
         dt_old, residual_old = dt, residual
 
@@ -281,7 +314,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
 def simulate_device(output_dir):
 
-    applied_voltages = np.arange(0.0, 1.15, 0.05)
+    applied_voltages = np.arange(0.0, 1.25, 0.025)
 
     chunk_size = min(len(applied_voltages), max(1, multiprocessing.cpu_count() - 1))
 

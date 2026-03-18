@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Requires a completed EQE simulation folder
-Simulation_folder = "D:/Backup/Defect_Paper/1D_NIP_EQE/WavelengthSweep/"
+Simulation_folder = "./Outputs/1D_NIP_EQE_2Bird/WavelengthSweep/"
 
 NumberOfSuns = 1.00
 ScalingFactor = 1.00

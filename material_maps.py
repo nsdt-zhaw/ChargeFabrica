@@ -1,5 +1,6 @@
 import os
 import hashlib
+import numpy as np
 
 class Semiconductor(object):
     def __init__(self, name, GenRate, epsilon, pmob, nmob, Eg, chi, cationmob, anionmob, Recombination_Langevin,
@@ -89,6 +90,19 @@ def load_all_electrodes(folder):
             materials[int(mat.code)] = mat
     return materials
 
+def map_semiconductor_property(devarray, prop):
+    return np.vectorize(lambda x: getattr(Semiconductors[x], prop))(devarray)
+
+def map_electrode_property(devarray, prop):
+    return np.vectorize(lambda x: getattr(Electrodes[x], prop))(devarray)
+
+def map_props(arr, props, table):
+    getter = np.vectorize(lambda x, p: getattr(table[x], p))
+    return [getter(arr, p) for p in props]
+
 # Usage:
 Semiconductors = load_all_semiconductors('Semiconductors')
 Electrodes = load_all_electrodes('Electrodes')
+
+name_to_code_SC = {mat.name: mat.code for mat in Semiconductors.values()}
+name_to_code_EL = {mat.name: mat.code for mat in Electrodes.values()}

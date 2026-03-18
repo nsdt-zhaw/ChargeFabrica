@@ -7,7 +7,6 @@ from matplotlib.widgets import Slider
 from scipy.interpolate import interp1d
 from scipy import signal
 
-
 Simulation_folder = "./Outputs/Drift_Diffusion_2D_IV_Simple_HTL_Free_Carbon_Device_IONS/VoltageSweep/"
 
 NumberOfSuns = 1.00
@@ -59,9 +58,22 @@ CationDensityMatrix = np.load(Simulation_folder + "CationDensityMatrix.npy")
 AnionDensityMatrix = AnionDensityMatrix.reshape((AnionDensityMatrix.shape[0], NMatrix.shape[1], NMatrix.shape[2]))
 CationDensityMatrix = CationDensityMatrix.reshape((CationDensityMatrix.shape[0], NMatrix.shape[1], NMatrix.shape[2]))
 ResidualMatrix = np.load(Simulation_folder + "ResidualMatrix.npy")
+ResidualArray = np.load(Simulation_folder + "residualarray.npy")[:]
 
 SweepCounterMatrix = np.load(Simulation_folder + "SweepCounterMatrix.npy")
 applied_voltages = np.load(Simulation_folder + "applied_voltages.npy")
+
+#Create a plot where residualarray over time is shown for different applied voltages
+fig3, ax4 = plt.subplots()
+for i in range(ResidualArray.shape[0]):
+    ax4.plot(ResidualArray[i,:], label="V={:.2f}V".format(applied_voltages[i]))
+ax4.set_yscale("log")
+ax4.set_xlabel("Time Step")
+ax4.set_ylabel("Residual")
+ax4.set_title("Residual over Time Steps for Different Applied Voltages")
+ax4.legend()
+plt.show(block=False)
+
 
 import copy
 my_cmap = copy.copy(plt.cm.get_cmap('hot')) # copy the default cmap

@@ -9,31 +9,16 @@ import fipy
 from fipy.tools import numerix
 import time
 from scipy.ndimage import zoom
-from scipy import constants
 from SmoothingFunction import flatten_and_smooth_all
 from joblib import Parallel, delayed
 import multiprocessing
-from material_maps import Semiconductors, Electrodes
 import copy
-
-TInfinite = 300.0
-(q, epsilon_0, D) = (constants.electron_volt, constants.epsilon_0, (constants.Boltzmann * TInfinite) / constants.electron_volt)
-
-name_to_code_SC = {mat.name: mat.code for mat in Semiconductors.values()}
-name_to_code_EL = {mat.name: mat.code for mat in Electrodes.values()}
+from material_maps import Semiconductors, Electrodes, map_semiconductor_property, map_electrode_property, map_props, name_to_code_SC, name_to_code_EL
+from constantsfile import TInfinite, q, epsilon_0, D
+from LoadSolarSpectrum import SolarSpectrumWavelength, SolarSpectrumIrradiance
 
 Si_NaDoping_ID = name_to_code_SC["Si_NaDoping"]
 Si_NdDoping_ID = name_to_code_SC["Si_NdDoping"]
-
-def map_semiconductor_property(devarray, prop):
-    return np.vectorize(lambda x: getattr(Semiconductors[x], prop))(devarray)
-
-def map_electrode_property(devarray, prop):
-    return np.vectorize(lambda x: getattr(Electrodes[x], prop))(devarray)
-
-def map_props(arr, props, table):
-    getter = np.vectorize(lambda x, p: getattr(table[x], p))
-    return [getter(arr, p) for p in props]
 
 StretchFactor = 1 #Can help convergence if a finer mesh is needed
 SmoothFactor = 0.2 #Some smoothing helps with convergence
@@ -51,8 +36,8 @@ TopLocationSC = DeviceArchitechture[-1,:].flatten() #Semiconducting materials ad
 BottomLocationSC = DeviceArchitechture[0,:].flatten() #Semiconducting materials adjacent to the bottom electrode
 
 EffectiveMediumApproximationVolumeFraction = 1.00
-GenRate_values_default = map_semiconductor_property(DeviceArchitechture, 'GenRate') #Binary array for whether generation is enabled or not
 
+GenRate_values_default = map_semiconductor_property(DeviceArchitechture, 'GenRate') #Binary array for whether generation is enabled or not
 GenRate_values_default = GenRate_values_default * 0.00e27
 
 #Stretching in case finer meshing is needed (Stretching of generation array is done afterwards since the 3D hyperspectral generation array may exhaust RAM on machine)
@@ -147,6 +132,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
     dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_timesteps = 1e-11, 1e-6, 1e-15, 0.01, 1, 1000
     residual, residual_old, dt_old, TotalTime, SweepCounter = 1., 1e10, dt, 0.0, 0
+    residualarray = np.zeros(max_timesteps)
 
     while SweepCounter < max_timesteps and residual > desired_residual or SweepCounter < 500:
 
@@ -166,6 +152,8 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
             residual += eqa.sweep(dt = dt, solver=solver) + eqc.sweep(dt = dt, solver=solver)
             alocal.setValue(DampingFactor * alocal + (1 - DampingFactor) * alocal.old)
             clocal.setValue(DampingFactor * clocal + (1 - DampingFactor) * clocal.old)
+
+        residualarray[SweepCounter] = residual
 
         PercentageImprovementPerSweep = (1 - (residual / residual_old) * dt_old / dt) * 100
 
@@ -190,18 +178,15 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     psinvar = LUMO - D * (numerix.log(nlocal) - LogNcCell)
     psipvar = HOMO + D * (numerix.log(plocal) - LogNvCell)
 
-    def reshapefunction(FipyFlattenedArray):
-        return [np.reshape(arr, (ny, nx)) for arr in FipyFlattenedArray]
-
     #Here the electron and hole current densities are calculated
     E = -philocal.grad.globalValue
     Jn = (q * nmob.globalValue * nlocal.globalValue * -psinvar.grad.globalValue)
     Jp = (q * pmob.globalValue * plocal.globalValue * -psipvar.grad.globalValue)
     Jn_Matrix, Jp_Matrix, Efield_matrix = [np.reshape(X, (X.shape[0], ny, nx)) for X in (Jn, Jp, E)]
 
-    (PotentialMatrix, GenValues_Matrix, RecombinationMatrix, Recombination_Bimolecular_EQMatrix, NMatrix, PMatrix, chiMatrix, EgMatrix, psinvarmatrix, psipvarmatrix) = reshapefunction([philocal, gen_rate, Recombination_Combined, Recombination_Bimolecular_EQ, nlocal, plocal, ChiCell, EgCell, psinvar, psipvar])
+    (PotentialMatrix, GenValues_Matrix, RecombinationMatrix, Recombination_Bimolecular_EQMatrix, NMatrix, PMatrix, chiMatrix, EgMatrix, psinvarmatrix, psipvarmatrix) = [np.reshape(arr,(ny, nx)) for arr in (philocal, gen_rate, Recombination_Combined, Recombination_Bimolecular_EQ, nlocal, plocal, ChiCell, EgCell, psinvar, psipvar)]
 
-    return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue, "p": plocal.globalValue, "phi": philocal.globalValue, "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue, "CationDensityMatrix": clocal.globalValue, "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Jn_Matrix": Jn_Matrix, "Jp_Matrix": Jp_Matrix, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix}
+    return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue, "p": plocal.globalValue, "phi": philocal.globalValue, "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue, "CationDensityMatrix": clocal.globalValue, "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Jn_Matrix": Jn_Matrix, "Jp_Matrix": Jp_Matrix, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix, "residualarray": residualarray}
 
 def simulate_device(output_dir):
 

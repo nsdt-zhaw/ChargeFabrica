@@ -27,9 +27,22 @@ psipvarmatrix = np.load(Simulation_folder + "psipvarmatrix.npy")[:]
 ChiMatrix = np.load(Simulation_folder + "ChiMatrix.npy")[:]
 EgMatrix = np.load(Simulation_folder + "EgMatrix.npy")[:]
 ResidualMatrix = np.load(Simulation_folder + "ResidualMatrix.npy")[:]
+ResidualArray = np.load(Simulation_folder + "residualarray.npy")[:]
 RadiativeRecombinationMatrix = np.load(Simulation_folder + "Recombination_Bimolecular_EQMatrix.npy")[:]
 PLYield = 100*RadiativeRecombinationMatrix / (GenerationMatrix+1)
 SweepCounterMatrix = np.load(Simulation_folder + "SweepCounterMatrix.npy")[:]
+
+#Create a plot where residualarray over time is shown for different applied voltages
+fig3, ax4 = plt.subplots()
+for i in range(ResidualArray.shape[0]):
+    ax4.plot(ResidualArray[i,:], label="V={:.2f}V".format(applied_voltages[i]))
+ax4.set_yscale("log")
+ax4.set_xlabel("Time Step")
+ax4.set_ylabel("Residual")
+ax4.set_title("Residual over Time Steps for Different Applied Voltages")
+ax4.legend()
+plt.show(block=False)
+
 print("SweepCounterMatrix", SweepCounterMatrix)
 def medfilt(x, k):
     """Apply a length-k median filter to a 1D array x. Boundaries are extended by repeating endpoints."""
