@@ -11,20 +11,16 @@ from fipy import CellVariable, TransientTerm, DiffusionTerm, ExponentialConvecti
 import fipy
 from fipy.tools import numerix
 import time
-import pandas as pd
 from scipy.ndimage import zoom
-from scipy import constants
 from SmoothingFunction import flatten_and_smooth_all
 from joblib import Parallel, delayed
 import multiprocessing
 from material_maps import Semiconductors, Electrodes
 import copy
-
-TInfinite = 300.0
-(q, epsilon_0, D) = (constants.electron_volt, constants.epsilon_0, (constants.Boltzmann * TInfinite) / constants.electron_volt)
-
-name_to_code_SC = {mat.name: mat.code for mat in Semiconductors.values()}
-name_to_code_EL = {mat.name: mat.code for mat in Electrodes.values()}
+from material_maps import Semiconductors, Electrodes, map_semiconductor_property, map_electrode_property, map_props, name_to_code_SC, name_to_code_EL
+from BoundaryConditions import ohmic
+from constantsfile import TInfinite, q, epsilon_0, D
+from LoadSolarSpectrum import SolarSpectrumWavelength, SolarSpectrumIrradiance
 
 Carbon_ID = name_to_code_EL["Carbon"]
 PS_ID = name_to_code_SC["PS"]
@@ -32,26 +28,11 @@ TiO2_ID = name_to_code_SC["mTiO2"]
 FTO_ID = name_to_code_EL["FTO"]
 ZrO2_ID = name_to_code_SC["ZrO2"]
 
-def map_semiconductor_property(devarray, prop):
-    return np.vectorize(lambda x: getattr(Semiconductors[x], prop))(devarray)
-
-def map_electrode_property(devarray, prop):
-    return np.vectorize(lambda x: getattr(Electrodes[x], prop))(devarray)
-
-def map_props(arr, props, table):
-    getter = np.vectorize(lambda x, p: getattr(table[x], p))
-    return [getter(arr, p) for p in props]
-
 StretchFactor = 1 #Can help convergence if a finer mesh is needed
 SmoothFactor = 0.2 #Some smoothing helps with convergence
 
 dx = 1.00e-9/StretchFactor #Pixel Width in meters
 dy = 1.00e-9/StretchFactor #Pixel Width in meters
-
-data = pd.read_excel('./Solar_Spectrum.xls', skiprows=2)
-grouped = data.groupby(data.iloc[:,0].round().astype(int)).mean()
-SolarSpectrumWavelength = grouped.index.values
-SolarSpectrumIrradiance = grouped.iloc[:, 2].values
 
 #Importing Absorbance Coefficient Spectrum for MAPbI3
 AbsorptionData = np.genfromtxt("MAPI_tailfit_nk 1.txt", delimiter=",", skip_header=1)
@@ -182,12 +163,6 @@ EgCell = CellVariable(name="Band Gap", mesh=mesh, value=Eg)
 NdCell = CellVariable(name="Fixed Ionised Donors", mesh=mesh, value=Nd_values)
 NaCell = CellVariable(name="Fixed Ionised Acceptor", mesh=mesh, value=Na_values)
 
-#Here we define the Ohmic boundary conditions
-def ohmic(sc_slice, electrode_id):
-    nboundary = map_semiconductor_property(sc_slice, 'Nc') * np.exp((map_semiconductor_property(sc_slice, 'chi') - map_electrode_property(electrode_id, "WF")) / D)
-    pboundary = map_semiconductor_property(sc_slice, 'Nv') * np.exp((map_electrode_property(electrode_id, "WF") - (map_semiconductor_property(sc_slice, 'chi') + map_semiconductor_property(sc_slice, 'Eg'))) / D)
-    return nboundary, pboundary
-
 nTop, pTop = ohmic(TopLocationSC, TopElectrode)
 nBottom, pBottom = ohmic(BottomLocationSC, BottomElectrode)
 Vbi = (map_electrode_property(BottomElectrode, "WF") - map_electrode_property(TopElectrode, "WF"))
@@ -265,26 +240,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     eqc = (0.00 == -TransientTerm(coeff=q, var=clocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=clocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * LUMO_c.faceGrad, var=clocal))
     eqpoisson = (0.00 == -TransientTerm(var=philocal) + DiffusionTerm(coeff=epsilon, var=philocal) + (q/epsilon_0) * (plocal - nlocal + clocal - alocal + NdCell - NaCell))
 
-    D_Recombination_SRH_Bulk_EQ_N = Recombination_Bulk_SRH_Cell * ((dplocal * (
-                tau_p_bulk * (dnlocal + n_hat_mixed) + tau_n_bulk * (dplocal + p_hat_mixed))) - tau_p_bulk * (
-                                                                               dnlocal * dplocal - niPS * niPS)) / ((
-                                                                                                                                tau_p_bulk * (
-                                                                                                                                    dnlocal + n_hat_mixed) + tau_n_bulk * (
-                                                                                                                                            dplocal + p_hat_mixed)) * (
-                                                                                                                                tau_p_bulk * (
-                                                                                                                                    dnlocal + n_hat_mixed) + tau_n_bulk * (
-                                                                                                                                            dplocal + p_hat_mixed)))
     D_Recombination_Bimolecular_EQ_N = Recombination_Bimolecular_Cell * (dplocal)
-
-    D_Recombination_SRH_Bulk_EQ_P = Recombination_Bulk_SRH_Cell * ((dnlocal * (
-                tau_p_bulk * (dnlocal + n_hat_mixed) + tau_n_bulk * (dplocal + p_hat_mixed))) - tau_n_bulk * (
-                                                                               dnlocal * dplocal - niPS * niPS)) / ((
-                                                                                                                                tau_p_bulk * (
-                                                                                                                                    dnlocal + n_hat_mixed) + tau_n_bulk * (
-                                                                                                                                            dplocal + p_hat_mixed)) * (
-                                                                                                          tau_p_bulk * (
-                                                                                                                                    dnlocal + n_hat_mixed) + tau_n_bulk * (
-                                                                                                                                            dplocal + p_hat_mixed)))
     D_Recombination_Bimolecular_EQ_P = Recombination_Bimolecular_Cell * (dnlocal)
 
     underRelaxation = 1.
@@ -303,10 +259,12 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
         t0 = time.time()
 
+        EnableIons = True
+
         for i in range(NumberofSweeps):
             deqpoisson.sweep(dt=dt, solver=solver)
             philocal.value = philocal.value + dphilocal.value
-            philocal.setValue(DampingFactor * philocal + (1 - DampingFactor) * philocal.old) # The potential should be damped BEFORE passing to the continuity equations!
+            philocal.setValue(DampingFactor * philocal + (1 - DampingFactor) * philocal.old)  # The potential should be damped BEFORE passing to the continuity equations!
 
             residual = deqn.sweep(dt=dt, solver=solver) + deqp.sweep(dt=dt, solver=solver)
             nlocal.value = nlocal.value + dnlocal.value
@@ -314,21 +272,19 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
             nlocal.setValue(DampingFactor * np.maximum(nlocal, 1.00e-30) + (1 - DampingFactor) * nlocal.old)
             plocal.setValue(DampingFactor * np.maximum(plocal, 1.00e-30) + (1 - DampingFactor) * plocal.old)
 
-        EnableIons = True
-        if EnableIons:
-            #Here the ionic continuity equations are solved
-            residual += deqa.sweep(dt=dt, solver=solver) + deqc.sweep(dt=dt, solver=solver)
-            alocal.value = alocal.value + dalocal.value
-            clocal.value = clocal.value + dclocal.value
-            alocal.setValue(DampingFactor * alocal + (1 - DampingFactor) * alocal.old)
-            clocal.setValue(DampingFactor * clocal + (1 - DampingFactor) * clocal.old)
+            if EnableIons:
+                residual += deqa.sweep(dt=dt/10, solver=solver) + deqc.sweep(dt=dt/10, solver=solver)
+                alocal.value = alocal.value + dalocal.value
+                clocal.value = clocal.value + dclocal.value
+                alocal.setValue(DampingFactor * alocal + (1 - DampingFactor) * alocal.old)
+                clocal.setValue(DampingFactor * clocal + (1 - DampingFactor) * clocal.old)
 
         residualarray[SweepCounter] = residual
 
         PercentageImprovementPerSweep = (1 - (residual / residual_old) * dt_old / dt) * 100
 
         if residual > residual_old * 1.2:
-            dt = max(1e-7, dt * 0.1)
+            dt = max(1.00e-7, dt * 0.1)
         else:
             dt = min(MaxTimeStep, dt * 1.05)
 
@@ -346,16 +302,13 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     psinvar = LUMO - D * (numerix.log(nlocal) - LogNcCell)
     psipvar = HOMO + D * (numerix.log(plocal) - LogNvCell)
 
-    def reshapefunction(FipyFlattenedArray):
-        return [np.reshape(arr, (ny, nx)) for arr in FipyFlattenedArray]
-
     #Here the electron and hole current densities are calculated
     E = -philocal.grad.globalValue
     Jn = (q * nmob.globalValue * nlocal.globalValue * -psinvar.grad.globalValue)
     Jp = (q * pmob.globalValue * plocal.globalValue * -psipvar.grad.globalValue)
     Jn_Matrix, Jp_Matrix, Efield_matrix = [np.reshape(X, (X.shape[0], ny, nx)) for X in (Jn, Jp, E)]
 
-    (PotentialMatrix, GenValues_Matrix, RecombinationMatrix, Recombination_Bimolecular_EQMatrix, NMatrix, PMatrix, chiMatrix, EgMatrix, psinvarmatrix, psipvarmatrix) = reshapefunction([philocal, gen_rate, Recombination_Combined, Recombination_Bimolecular_EQ, nlocal, plocal, ChiCell, EgCell, psinvar, psipvar])
+    (PotentialMatrix, GenValues_Matrix, RecombinationMatrix, Recombination_Bimolecular_EQMatrix, NMatrix, PMatrix, chiMatrix, EgMatrix, psinvarmatrix, psipvarmatrix) = [np.reshape(arr,(ny, nx)) for arr in (philocal, gen_rate, Recombination_Combined, Recombination_Bimolecular_EQ, nlocal, plocal, ChiCell, EgCell, psinvar, psipvar)]
 
     return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue, "p": plocal.globalValue, "phi": philocal.globalValue, "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue, "CationDensityMatrix": clocal.globalValue, "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Jn_Matrix": Jn_Matrix, "Jp_Matrix": Jp_Matrix, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix, "ResidualArray": residualarray}
 
