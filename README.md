@@ -9,10 +9,11 @@ Authors: Tristan Sachsenweger, Miguel A. Torre Cachafeiro, Wolfgang Tress
 1. [Introduction](#introduction)
 2. [Installation](#installation)
 3. [QuickStart](#quickstart)
-4. [Computation Time](#computation-time)
-5. [Units and Formatting](#units-and-formatting)
-6. [Numerics and Damping](#numerics-and-damping)
-7. [How to cite](#how-to-cite)
+4. [Video Tutorials](#video-tutorials)
+5. [Computation Time](#computation-time)
+6. [Units and Formatting](#units-and-formatting)
+7. [Numerics and Damping](#numerics-and-damping)
+8. [How to cite](#how-to-cite)
 
 ## Introduction
 ChargeFabrica uses [fipy](https://github.com/usnistgov/fipy) to solve the semiconductor equations in 1D, 2D or 3D, thereby determining the electrostatic potential, charge density distributions for electrons, holes and mobile ions and the resulting current-voltage relationships. Furthermore, Beer–Lambert generation, various recombination mechanisms, PL Yield, external quantum efficiency (EQE), spatial collection efficiency (SCE) and ion preconditioning can be modelled. The solver is designed to handle arbitrary semiconductor geometries, which can be defined within a numpy array.
@@ -56,6 +57,11 @@ It is recommended to start with the script [Drift_Diffusion_1D_IV_IONS_NIP_Examp
 Once the simulation is completed, the results are saved as .npy files in the ./Outputs folder
 
 The results can then be plotted using the [PlottingResults1D.py](PlottingResults1D.py) script.
+
+## Video Tutorials
+Here we provide a list of instructional videos to help new users get familiar with the program:
+
+1  [Installation and QuickStart Tutorial](https://www.youtube.com/watch?v=Io8mPTLpUPw)
 
 ## Computation Time
 The 1D compute time with ions enabled on a Intel(R) Core(TM) i9-12900 desktop PC is roughly 1-2 minutes.
