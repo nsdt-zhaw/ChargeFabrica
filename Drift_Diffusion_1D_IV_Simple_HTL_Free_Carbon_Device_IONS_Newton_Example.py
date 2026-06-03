@@ -206,7 +206,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     deqc = ((0.00 == -TransientTerm(coeff=q, var=dclocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=dclocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * LUMO_c.faceGrad, var=dclocal)) + ResidualTerm(equation=eqc, underRelaxation=underRelaxation))
     deqpoisson = ((0.00 == -TransientTerm(var=dphilocal) + DiffusionTerm(coeff=epsilon, var=dphilocal) + (q / epsilon_0) * (dplocal - dnlocal + dclocal - dalocal)) + ResidualTerm(equation=eqpoisson, underRelaxation=underRelaxation))
 
-    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_timesteps = 1e-8, 1e-6, 1e-10, 0.02, 1, 2000
+    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_timesteps = 1.00e-7, 1.00e-5, 1e-10, 0.02, 1, 2000
     residual, residual_old, dt_old, TotalTime, SweepCounter = 1., 1e10, dt, 0.0, 0
     residualarray = np.zeros(max_timesteps)
 
@@ -214,48 +214,37 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
         t0 = time.time()
 
+        EnableIons = True
+
         for i in range(NumberofSweeps):
-            EnableIons = True
-            if residual > 1.00e-6:
-                eqpoisson.sweep(dt=dt, solver=solver)
-                philocal.setValue(DampingFactor * philocal + (1 - DampingFactor) * philocal.old)  # The potential should be damped BEFORE passing to the continuity equations!
+            deqpoisson.sweep(dt=dt, solver=solver)
+            philocal.value = philocal.value + dphilocal.value
+            philocal.setValue(DampingFactor * philocal + (1 - DampingFactor) * philocal.old)  # The potential should be damped BEFORE passing to the continuity equations!
 
-                residual = eqn.sweep(dt=dt, solver=solver) + eqp.sweep(dt=dt, solver=solver)
-                nlocal.setValue(DampingFactor * np.maximum(nlocal, 1.00e-30) + (1 - DampingFactor) * nlocal.old)
-                plocal.setValue(DampingFactor * np.maximum(plocal, 1.00e-30) + (1 - DampingFactor) * plocal.old)
+            residual = deqn.sweep(dt=dt, solver=solver) + deqp.sweep(dt=dt, solver=solver)
+            nlocal.value = nlocal.value + dnlocal.value
+            plocal.value = plocal.value + dplocal.value
+            nlocal.setValue(DampingFactor * np.maximum(nlocal, 1.00e-30) + (1 - DampingFactor) * nlocal.old)
+            plocal.setValue(DampingFactor * np.maximum(plocal, 1.00e-30) + (1 - DampingFactor) * plocal.old)
 
-                if EnableIons:
-                    residual += eqa.sweep(dt=dt, solver=solver) + eqc.sweep(dt=dt, solver=solver)
-                    alocal.setValue(DampingFactor * alocal + (1 - DampingFactor) * alocal.old)
-                    clocal.setValue(DampingFactor * clocal + (1 - DampingFactor) * clocal.old)
-            else:
-                deqpoisson.sweep(dt=dt, solver=solver)
-                philocal.value = philocal.value + dphilocal.value
-                philocal.setValue(DampingFactor * philocal + (1 - DampingFactor) * philocal.old)  # The potential should be damped BEFORE passing to the continuity equations!
-
-                residual = deqn.sweep(dt=dt, solver=solver) + deqp.sweep(dt=dt, solver=solver)
-                nlocal.value = nlocal.value + dnlocal.value
-                plocal.value = plocal.value + dplocal.value
-                nlocal.setValue(DampingFactor * np.maximum(nlocal, 1.00e-30) + (1 - DampingFactor) * nlocal.old)
-                plocal.setValue(DampingFactor * np.maximum(plocal, 1.00e-30) + (1 - DampingFactor) * plocal.old)
-
-                if EnableIons:
-                    residual += deqa.sweep(dt=dt, solver=solver) + deqc.sweep(dt=dt, solver=solver)
-                    alocal.value = alocal.value + dalocal.value
-                    clocal.value = clocal.value + dclocal.value
-                    alocal.setValue(DampingFactor * alocal + (1 - DampingFactor) * alocal.old)
-                    clocal.setValue(DampingFactor * clocal + (1 - DampingFactor) * clocal.old)
+            if EnableIons:
+                residual += deqa.sweep(dt=dt, solver=solver) + deqc.sweep(dt=dt, solver=solver)
+                alocal.value = alocal.value + dalocal.value
+                clocal.value = clocal.value + dclocal.value
+                alocal.setValue(DampingFactor * alocal + (1 - DampingFactor) * alocal.old)
+                clocal.setValue(DampingFactor * clocal + (1 - DampingFactor) * clocal.old)
 
         residualarray[SweepCounter] = residual
 
         PercentageImprovementPerSweep = (1 - (residual / residual_old) * dt_old / dt) * 100
 
         if residual > residual_old * 1.2:
-            dt = max(1.00e-8, dt * 0.1)
+            dt = max(1.00e-7, dt * 0.1)
         else:
             dt = min(MaxTimeStep, dt * 1.05)
 
         dt_old, residual_old = dt, residual
+
 
         # Update old
         for v in (nlocal, plocal, alocal, clocal, philocal, dnlocal, dplocal, dalocal, dclocal, dphilocal): v.updateOld()
