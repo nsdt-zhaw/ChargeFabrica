@@ -14,6 +14,7 @@ Authors: Tristan Sachsenweger, Miguel A. Torre Cachafeiro, Wolfgang Tress
 6. [Units and Formatting](#units-and-formatting)
 7. [Numerics and Damping](#numerics-and-damping)
 8. [How to cite](#how-to-cite)
+9. [Publications using ChargeFabrica](#publications-using-chargefabrica)
 
 ## Introduction
 ChargeFabrica uses [fipy](https://github.com/usnistgov/fipy) to solve the semiconductor equations in 1D, 2D or 3D, thereby determining the electrostatic potential, charge density distributions for electrons, holes and mobile ions and the resulting current-voltage relationships. Furthermore, Beer–Lambert generation, various recombination mechanisms, PL Yield, external quantum efficiency (EQE), spatial collection efficiency (SCE) and ion preconditioning can be modelled. The solver is designed to handle arbitrary semiconductor geometries, which can be defined within a numpy array.
@@ -133,6 +134,8 @@ ChargeFabrica has been published as:
 	year={2025}
 }
 
+## Publications using ChargeFabrica
+Ji, F., Sachsenweger Ballantyne, T., Meraji, K. et al. Simultaneous optimization of film morphology and structure dimensionality in Cs3Sb2I9 through butylamine gas treatment. Commun Mater (2026). https://doi.org/10.1038/s43246-026-01240-8
 
 
 
