@@ -54,7 +54,7 @@ GenRate_values_default = map_semiconductor_property(DeviceArchitechture, 'GenRat
 GenMode = 1
 if GenMode == 1:
     #Lambert-Beer Law
-    GenRate_values_default, ThermalisationHeat, PhotonFluxArray, TransmittedEnergy = calculate_absorption_above_bandgap(SolarSpectrumWavelength, SolarSpectrumIrradiance, AbsorptionData[:, 0], alphadata * EffectiveMediumApproximationVolumeFraction,GenRate_values_default, dx*StretchFactor, map_semiconductor_property(PS_ID, "Eg"))
+    GenRate_values_default, ThermalisationHeat, PhotonFluxArray, TransmittedEnergy = calculate_absorption_above_bandgap(SolarSpectrumWavelength, SolarSpectrumIrradiance, AbsorptionData[:, 0], alphadata * EffectiveMediumApproximationVolumeFraction,GenRate_values_default, dy*StretchFactor, map_semiconductor_property(PS_ID, "Eg"))
 else:
     #Constant Generation Rate
     GenRate_values_default = GenRate_values_default * 2.20e27
