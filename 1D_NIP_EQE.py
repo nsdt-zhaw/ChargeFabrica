@@ -302,8 +302,8 @@ def simulate_device(output_dir):
             SolarSpectrumIrradianceEQE = 1.0 * np.ones(len(SolarSpectrumWavelengthEQE))
             SolarSpectrumIrradienceOriginal = SolarSpectrumIrradiance[closest_start_index - 5:closest_start_index + 5]
             EffectiveMediumApproximationVolumeFraction = 1.00
-            GenRate_values_default, ThermalisationHeat, PhotonFluxArray, TransmittedEnergy = calculate_absorption_above_bandgap(SolarSpectrumWavelengthEQE, SolarSpectrumIrradianceEQE, AbsorptionData[:, 0],alphadata * EffectiveMediumApproximationVolumeFraction, GenRate_values_default_location,dx * StretchFactor, map_semiconductor_property(PS_ID, "Eg"))
-            GenRate_values_defaultSolarSpec, ThermalisationHeatSolarSpec, PhotonFluxArraySolarSpec, TransmittedEnergySolarSpec = calculate_absorption_above_bandgap(SolarSpectrumWavelengthEQE, SolarSpectrumIrradienceOriginal, AbsorptionData[:, 0],alphadata * EffectiveMediumApproximationVolumeFraction, GenRate_values_default_location,dx * StretchFactor, map_semiconductor_property(PS_ID, "Eg"))
+            GenRate_values_default, ThermalisationHeat, PhotonFluxArray, TransmittedEnergy = calculate_absorption_above_bandgap(SolarSpectrumWavelengthEQE, SolarSpectrumIrradianceEQE, AbsorptionData[:, 0],alphadata * EffectiveMediumApproximationVolumeFraction, GenRate_values_default_location,dy * StretchFactor, map_semiconductor_property(PS_ID, "Eg"))
+            GenRate_values_defaultSolarSpec, ThermalisationHeatSolarSpec, PhotonFluxArraySolarSpec, TransmittedEnergySolarSpec = calculate_absorption_above_bandgap(SolarSpectrumWavelengthEQE, SolarSpectrumIrradienceOriginal, AbsorptionData[:, 0],alphadata * EffectiveMediumApproximationVolumeFraction, GenRate_values_default_location,dy * StretchFactor, map_semiconductor_property(PS_ID, "Eg"))
 
             GenerationArray.append(GenRate_values_default)
 
