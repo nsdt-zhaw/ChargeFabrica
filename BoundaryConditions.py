@@ -1,12 +1,6 @@
-from material_maps import Semiconductors, Electrodes
 import numpy as np
 from constantsfile import D
-
-def map_semiconductor_property(devarray, prop):
-    return np.vectorize(lambda x: getattr(Semiconductors[x], prop))(devarray)
-
-def map_electrode_property(devarray, prop):
-    return np.vectorize(lambda x: getattr(Electrodes[x], prop))(devarray)
+from material_maps import map_electrode_property, map_semiconductor_property
 
 #Here we define the Ohmic boundary conditions
 def ohmic(sc_slice, electrode_id):

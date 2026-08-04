@@ -1,108 +1,48 @@
-import os
 import hashlib
+from pathlib import Path
 import numpy as np
 
-class Semiconductor(object):
-    def __init__(self, name, GenRate, epsilon, pmob, nmob, Eg, chi, cationmob, anionmob, Recombination_Langevin,
-                 Recombination_Bimolecular, Nc, Nv, Chi_a, Chi_c, a_initial_level, c_initial_level, Nd, Na):
-        self.name = name
-        self.code = self.generate_code(name)
-        self.GenRate = GenRate
-        self.epsilon = epsilon
-        self.pmob = pmob
-        self.nmob = nmob
-        self.Eg = Eg
-        self.chi = chi
-        self.cationmob = cationmob
-        self.anionmob = anionmob
-        self.Recombination_Langevin = Recombination_Langevin
-        self.Recombination_Bimolecular = Recombination_Bimolecular
-        self.Nc = Nc
-        self.Nv = Nv
-        self.Chi_a = Chi_a
-        self.Chi_c = Chi_c
-        self.a_initial_level = a_initial_level
-        self.c_initial_level = c_initial_level
-        self.Nd = Nd
-        self.Na = Na
+ROOT = Path(__file__).resolve().parent
 
-    @staticmethod
-    def generate_code(name):
-        # Generate stable integer code from name string using MD5 hash
-        md5_hash = hashlib.md5(name.encode('utf-8')).hexdigest()
-        # Take first 8 characters and convert to int base 16 (32 bits)
-        code = int(md5_hash[:8], 16)
-        return code
-def load_semiconductor_from_txt(path):
+class Material:
+    """Material properties loaded from one text file. Hashing is used to generate a suitable integer code for each material based on its name."""
+    def __init__(self, **properties):
+        self.__dict__.update(properties)
+        self.code = int(hashlib.md5(self.name.encode("utf-8")).hexdigest()[:8], 16)
+
+def _read_fields(path):
     fields = {}
-    with open(path) as f:
-        for line in f:
-            if ":" not in line or line.strip().startswith("#"):
-                continue  # Skip comments or invalid lines
-            key, val = [i.strip() for i in line.split(":", 1)]
+    with path.open(encoding="utf-8") as source:
+        for raw_line in source:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or ":" not in line:
+                continue
+            key, value = (part.strip() for part in line.split(":", 1))
             try:
-                val = float(val)
-            except Exception:
-                pass  # Keep as string if not a float
-            fields[key] = val
-    return Semiconductor(**fields)
-def load_all_semiconductors(folder):
-    materials = {}
-    for fname in os.listdir(folder):
-        if fname.endswith(".txt"):
-            mat = load_semiconductor_from_txt(os.path.join(folder, fname))
-            materials[int(mat.code)] = mat
-    return materials
+                value = float(value)
+            except ValueError:
+                pass
+            fields[key] = value
+    return fields
 
-class Electrode(object):
-    def __init__(self, name, WF):
-        self.name = name
-        self.code = self.generate_code(name)
-        self.WF = WF
+def _load_materials(folder):
+    paths = (ROOT / folder).glob("*.txt")
+    materials = [Material(**_read_fields(path)) for path in paths]
+    return {material.code: material for material in materials}
 
-    @staticmethod
-    def generate_code(name):
-        # Generate stable integer code from name string using MD5 hash
-        md5_hash = hashlib.md5(name.encode('utf-8')).hexdigest()
-        # Take first 8 characters and convert to int base 16 (32 bits)
-        code = int(md5_hash[:8], 16)
-        return code
+def _map_property(values, prop, table):
+    return np.vectorize(lambda material_id: getattr(table[material_id], prop))(values)
 
-def load_electrode_from_txt(path):
-    fields = {}
-    with open(path) as f:
-        for line in f:
-            if ":" not in line or line.strip().startswith("#"):
-                continue  # Skip comments or invalid lines
-            key, val = [i.strip() for i in line.split(":", 1)]
-            try:
-                val = float(val)
-            except Exception:
-                pass  # Keep as string if not a float
-            fields[key] = val
-    return Electrode(**fields)
+def map_semiconductor_property(values, prop):
+    return _map_property(values, prop, Semiconductors)
 
-def load_all_electrodes(folder):
-    materials = {}
-    for fname in os.listdir(folder):
-        if fname.endswith(".txt"):
-            mat = load_electrode_from_txt(os.path.join(folder, fname))
-            materials[int(mat.code)] = mat
-    return materials
+def map_electrode_property(values, prop):
+    return _map_property(values, prop, Electrodes)
 
-def map_semiconductor_property(devarray, prop):
-    return np.vectorize(lambda x: getattr(Semiconductors[x], prop))(devarray)
+def map_props(values, props, table):
+    return [_map_property(values, prop, table) for prop in props]
 
-def map_electrode_property(devarray, prop):
-    return np.vectorize(lambda x: getattr(Electrodes[x], prop))(devarray)
-
-def map_props(arr, props, table):
-    getter = np.vectorize(lambda x, p: getattr(table[x], p))
-    return [getter(arr, p) for p in props]
-
-# Usage:
-Semiconductors = load_all_semiconductors('Semiconductors')
-Electrodes = load_all_electrodes('Electrodes')
-
-name_to_code_SC = {mat.name: mat.code for mat in Semiconductors.values()}
-name_to_code_EL = {mat.name: mat.code for mat in Electrodes.values()}
+Semiconductors = _load_materials("Semiconductors")
+Electrodes = _load_materials("Electrodes")
+name_to_code_SC = {material.name: code for code, material in Semiconductors.items()}
+name_to_code_EL = {material.name: code for code, material in Electrodes.items()}
