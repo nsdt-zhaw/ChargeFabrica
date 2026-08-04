@@ -19,6 +19,7 @@ from material_maps import Semiconductors, Electrodes, map_semiconductor_property
 from BoundaryConditions import ohmic
 from constantsfile import TInfinite, q, epsilon_0, D
 from LoadSolarSpectrum import SolarSpectrumWavelength, SolarSpectrumIrradiance
+from workflow_utils import append_to_npy, run_sweep
 
 Gold_ID = name_to_code_EL["Gold"]
 Spiro_ID = name_to_code_SC["Spiro"]
@@ -273,15 +274,6 @@ def simulate_device(output_dir):
     c_values = c_initial_values.flatten()
     phi_values = 0.00
 
-    def append_to_npy(filename, new_data):
-        new_data = np.expand_dims(new_data, axis=0)
-        path = os.path.join(output_dir, filename)
-        if os.path.isfile(path):
-            fulldata = np.concatenate((np.load(path), new_data), axis=0)
-        else:
-            fulldata = new_data
-        np.save(path, fulldata)
-
     # Process wavelengths in sequential chunks
     for start in range(0, len(Tested_Wavelengths), chunk_size):
         # Create a chunk of wavelengths to simulate in parallel
@@ -345,7 +337,7 @@ def simulate_device(output_dir):
         # Save dictionary of chunk_results as .npy files named after the key
         for result in copied_result:
             for key, value in result.items():
-                append_to_npy(key + ".npy", value)
+                append_to_npy(output_dir, key + ".npy", value)
 
         #Save an array of all the voltages applied so far
         np.save(os.path.join(output_dir, "applied_wavelengths.npy"), Tested_Wavelengths)
@@ -361,16 +353,7 @@ def simulate_device(output_dir):
     return copied_result
 
 def main_workflow():
-    current_file = os.path.basename(__file__)[0:-3]
-    wavelength_sweep_output_dir = "./Outputs/" + current_file + "/WavelengthSweep"
-
-    if not os.path.exists(wavelength_sweep_output_dir):
-        os.makedirs(wavelength_sweep_output_dir)
-
-    print("Starting wavelength sweep...")
-    results = simulate_device(output_dir=wavelength_sweep_output_dir)
-    print("Wavelength sweep completed.")
-    return results
+    return run_sweep(simulate_device, __file__, "WavelengthSweep", "Starting wavelength sweep...", "Wavelength sweep completed.")
 
 # Fix for multiprocessing on Windows
 if __name__ == '__main__':

@@ -20,6 +20,7 @@ from material_maps import Semiconductors, Electrodes, map_semiconductor_property
 from BoundaryConditions import ohmic
 from constantsfile import TInfinite, q, epsilon_0, D
 from LoadSolarSpectrum import SolarSpectrumWavelength, SolarSpectrumIrradiance
+from workflow_utils import append_to_npy, run_sweep
 
 Carbon_ID = name_to_code_EL["Carbon"]
 PS_ID = name_to_code_SC["PS"]
@@ -272,18 +273,13 @@ def simulate_device(output_dir):
 
     applied_voltages = np.arange(0.0, 1.15, 0.05)
 
-    chunk_size = min(len(applied_voltages), max(1, multiprocessing.cpu_count() - 1))
+    chunk_size = 4
 
     n_values = 1.00e-30
     p_values = 1.00e-30
     a_values = a_initial_values.flatten()
     c_values = c_initial_values.flatten()
     phi_values = 1.00e-30
-
-    def append_to_npy(filename, new_data):
-        new_data = np.expand_dims(new_data, axis=0)
-        path = os.path.join(output_dir, filename)
-        np.save(path, np.concatenate((np.load(path), new_data), axis=0) if os.path.isfile(path) else new_data)
 
     # Process voltages in sequential chunks
     for start in range(0, len(applied_voltages), chunk_size):
@@ -299,7 +295,7 @@ def simulate_device(output_dir):
         # Save dictionary of chunk_results as .npy files named after the key
         for result in copied_result:
             for key, value in result.items():
-                append_to_npy(key + ".npy", value)
+                append_to_npy(output_dir, key + ".npy", value)
 
         #Save an array of all the voltages applied so far
         np.save(os.path.join(output_dir, "applied_voltages.npy"), applied_voltages[:start + len(chunk_voltages)])
@@ -312,16 +308,7 @@ def simulate_device(output_dir):
     return copied_result
 
 def main_workflow():
-    current_file = os.path.basename(__file__)[0:-3]
-    voltage_sweep_output_dir = "./Outputs/" + current_file + "/VoltageSweep"
-
-    if not os.path.exists(voltage_sweep_output_dir):
-        os.makedirs(voltage_sweep_output_dir)
-
-    print("Starting standard voltage sweep...")
-    results = simulate_device(output_dir=voltage_sweep_output_dir)
-    print("Voltage sweep completed.")
-    return results
+    return run_sweep(simulate_device, __file__, "VoltageSweep", "Starting standard voltage sweep...", "Voltage sweep completed.")
 
 # Fix for multiprocessing on Windows
 if __name__ == '__main__':
