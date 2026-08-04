@@ -1,38 +1,6 @@
 import numpy as np
 from scipy.ndimage import binary_dilation
 
-#Places the interface inside layer_value_2
-def mark_interfaces_backup(device_architecture, layer_value_1, layer_value_2, dilation_size=3):
-    """
-    Marks the interfacial region between two layers in a device architecture of any dimension.
-
-    Arguments:
-    - device_architecture: n-dimensional array representing the device architecture.
-    - layer_value_1: the value in the device_architecture array that represents the first layer.
-    - layer_value_2: the value in the device_architecture array that represents the second layer.
-    - dilation_size: how much to dilate the boundary of the layers. Default is 3.
-
-    Returns an array with same shape as device_architecture with the interface marked, where the value is 1.
-    """
-    # Find locations of each layer
-    location_layer_1 = np.where(device_architecture == layer_value_1, 1, 0)
-    location_layer_2 = np.where(device_architecture == layer_value_2, 1, 0)
-
-    # Create a symmetric structuring element
-    if dilation_size % 2 == 0:  # Even size
-        adjusted_size = dilation_size + 1  # Convert to odd
-    else:
-        adjusted_size = dilation_size
-
-    # Dilate the boundary of the first layer
-    structure = np.ones([adjusted_size] * device_architecture.ndim)
-    dilated_location_layer_1 = binary_dilation(location_layer_1, structure=structure)
-
-    # Apply Boolean AND to get the common regions between dilated first layer and second layer
-    location_interface = dilated_location_layer_1 & location_layer_2
-
-    return location_interface.astype(float)
-
 def mark_interfaces(device_architecture, layer_value_1, layer_value_2, dilation_size=3):
     """
     Marks the interfacial region between two layers in a device architecture of any dimension.
