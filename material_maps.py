@@ -1,10 +1,10 @@
 import hashlib
-from pathlib import Path
+import os
 import numpy as np
 
-ROOT = Path(__file__).resolve().parent
+ROOT = os.path.dirname(os.path.abspath(__file__))
 
-class Material:
+class Material(object):
     """Material properties loaded from one text file. Hashing is used to generate a suitable integer code for each material based on its name."""
     def __init__(self, **properties):
         self.__dict__.update(properties)
@@ -12,7 +12,7 @@ class Material:
 
 def _read_fields(path):
     fields = {}
-    with path.open(encoding="utf-8") as source:
+    with open(path) as source:
         for raw_line in source:
             line = raw_line.strip()
             if not line or line.startswith("#") or ":" not in line:
@@ -26,7 +26,8 @@ def _read_fields(path):
     return fields
 
 def _load_materials(folder):
-    paths = (ROOT / folder).glob("*.txt")
+    directory = os.path.join(ROOT, folder)
+    paths = (os.path.join(directory, name) for name in os.listdir(directory) if name.endswith(".txt"))
     materials = [Material(**_read_fields(path)) for path in paths]
     return {material.code: material for material in materials}
 
