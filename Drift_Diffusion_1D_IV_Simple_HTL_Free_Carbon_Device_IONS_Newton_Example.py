@@ -273,7 +273,7 @@ def simulate_device(output_dir):
 
     applied_voltages = np.arange(0.0, 1.15, 0.05)
 
-    chunk_size = 4
+    chunk_size = min(len(applied_voltages), max(1, multiprocessing.cpu_count() - 1))
 
     n_values = 1.00e-30
     p_values = 1.00e-30
