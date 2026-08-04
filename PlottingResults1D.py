@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from matplotlib.widgets import Slider
 from scipy.interpolate import interp1d
+from plotting_utils import median_filter_1d
 
 # Load data
 Simulation_folder = "./Outputs/Drift_Diffusion_1D_IV_IONS_NIP_Example/VoltageSweep/"
@@ -44,29 +45,15 @@ ax4.legend()
 plt.show(block=False)
 
 print("SweepCounterMatrix", SweepCounterMatrix)
-def medfilt(x, k):
-    """Apply a length-k median filter to a 1D array x. Boundaries are extended by repeating endpoints."""
-    assert k % 2 == 1, "Median filter length must be odd."
-    assert x.ndim == 1, "Input must be one-dimensional."
-    k2 = (k - 1) // 2
-    y = np.zeros((len(x), k), dtype=x.dtype)
-    y[:, k2] = x
-    for i in range(k2):
-        j = k2 - i
-        y[j:,i] = x[:-j]
-        y[:j,i] = x[0]
-        y[:-j,-(i+1)] = x[j:]
-        y[-j:,-(i+1)] = x[-1]
-    return np.median(y, axis=1)
 
 for i in range(JTotal_Y.shape[0]):
-    JTotal_Y_Flattened = medfilt(JTotal_Y[i].flatten(), 5)
+    JTotal_Y_Flattened = median_filter_1d(JTotal_Y[i].flatten(), 5)
     JTotal_Y[i] = np.expand_dims(JTotal_Y_Flattened, axis=1)
 for i in range(Jn_Matrix.shape[0]):
-    Jn_Matrix_Flattened = medfilt(Jn_Matrix[i].flatten(), 5)
+    Jn_Matrix_Flattened = median_filter_1d(Jn_Matrix[i].flatten(), 5)
     Jn_Matrix[i] = np.expand_dims(Jn_Matrix_Flattened, axis=1)
 for i in range(Jp_Matrix.shape[0]):
-    Jp_Matrix_Flattened = medfilt(Jp_Matrix[i].flatten(), 5)
+    Jp_Matrix_Flattened = median_filter_1d(Jp_Matrix[i].flatten(), 5)
     Jp_Matrix[i] = np.expand_dims(Jp_Matrix_Flattened, axis=1)
 
 AnionDensityMatrix = np.load(Simulation_folder + "AnionDensityMatrix.npy")[:]

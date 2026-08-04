@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from plotting_utils import median_filter_1d
 
 #Plotting code for Spatial Collection Efficiency (SCE) calculation from 1D drift-diffusion simulation data
 Simulation_folder = "./Outputs/1D_NIP_SCE_Example/VoltageSweep/"
@@ -13,29 +14,14 @@ Jn_Matrix = np.load(Simulation_folder + "Jn_Matrix.npy")[:,1,:,:]
 Jp_Matrix = np.load(Simulation_folder + "Jp_Matrix.npy")[:,1,:,:]
 JTotal_Y = (Jn_Matrix + Jp_Matrix)
 
-def medfilt(x, k):
-    """Apply a length-k median filter to a 1D array x. Boundaries are extended by repeating endpoints."""
-    assert k % 2 == 1, "Median filter length must be odd."
-    assert x.ndim == 1, "Input must be one-dimensional."
-    k2 = (k - 1) // 2
-    y = np.zeros((len(x), k), dtype=x.dtype)
-    y[:, k2] = x
-    for i in range(k2):
-        j = k2 - i
-        y[j:,i] = x[:-j]
-        y[:j,i] = x[0]
-        y[:-j,-(i+1)] = x[j:]
-        y[-j:,-(i+1)] = x[-1]
-    return np.median(y, axis=1)
-
 for i in range(JTotal_Y.shape[0]):
-    JTotal_Y_Flattened = medfilt(JTotal_Y[i].flatten(), 5)
+    JTotal_Y_Flattened = median_filter_1d(JTotal_Y[i].flatten(), 5)
     JTotal_Y[i] = np.expand_dims(JTotal_Y_Flattened, axis=1)
 for i in range(Jn_Matrix.shape[0]):
-    Jn_Matrix_Flattened = medfilt(Jn_Matrix[i].flatten(), 5)
+    Jn_Matrix_Flattened = median_filter_1d(Jn_Matrix[i].flatten(), 5)
     Jn_Matrix[i] = np.expand_dims(Jn_Matrix_Flattened, axis=1)
 for i in range(Jp_Matrix.shape[0]):
-    Jp_Matrix_Flattened = medfilt(Jp_Matrix[i].flatten(), 5)
+    Jp_Matrix_Flattened = median_filter_1d(Jp_Matrix[i].flatten(), 5)
     Jp_Matrix[i] = np.expand_dims(Jp_Matrix_Flattened, axis=1)
 
 JTotal_Y_default = JTotal_Y[0]

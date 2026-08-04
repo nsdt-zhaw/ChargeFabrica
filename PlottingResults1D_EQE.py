@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from plotting_utils import median_filter_1d
 
 # Requires a completed EQE simulation folder
 Simulation_folder = "./Outputs/1D_NIP_EQE_2Bird/WavelengthSweep/"
@@ -17,29 +18,14 @@ PhotonFluxArrayOriginalSplit = np.load(Simulation_folder + "PhotonFluxArrayOrigi
 PhotonFluxPerturbation = PhotonFluxMatrix - PhotonFluxArrayOriginal
 applied_wavelengths = np.load(Simulation_folder + "applied_wavelengths.npy")
 
-def medfilt(x, k):
-    """Apply a length-k median filter to a 1D array x. Boundaries are extended by repeating endpoints."""
-    assert k % 2 == 1, "Median filter length must be odd."
-    assert x.ndim == 1, "Input must be one-dimensional."
-    k2 = (k - 1) // 2
-    y = np.zeros((len(x), k), dtype=x.dtype)
-    y[:, k2] = x
-    for i in range(k2):
-        j = k2 - i
-        y[j:,i] = x[:-j]
-        y[:j,i] = x[0]
-        y[:-j,-(i+1)] = x[j:]
-        y[-j:,-(i+1)] = x[-1]
-    return np.median(y, axis=1)
-
 for i in range(JTotal_Y.shape[0]):
-    JTotal_Y_Flattened = medfilt(JTotal_Y[i].flatten(), 5)
+    JTotal_Y_Flattened = median_filter_1d(JTotal_Y[i].flatten(), 5)
     JTotal_Y[i] = np.expand_dims(JTotal_Y_Flattened, axis=1)
 for i in range(Jn_Y.shape[0]):
-    Jn_Y_Flattened = medfilt(Jn_Y[i].flatten(), 5)
+    Jn_Y_Flattened = median_filter_1d(Jn_Y[i].flatten(), 5)
     Jn_Y[i] = np.expand_dims(Jn_Y_Flattened, axis=1)
 for i in range(Jp_Y.shape[0]):
-    Jp_Y_Flattened = medfilt(Jp_Y[i].flatten(), 5)
+    Jp_Y_Flattened = median_filter_1d(Jp_Y[i].flatten(), 5)
     Jp_Y[i] = np.expand_dims(Jp_Y_Flattened, axis=1)
 
 JTotal_Y_mean = -np.mean(JTotal_Y[:,20:80,:], axis=(1, 2))
