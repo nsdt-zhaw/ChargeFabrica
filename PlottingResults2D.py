@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from matplotlib.widgets import Slider
 from scipy.interpolate import interp1d
-from scipy import signal
 
 Simulation_folder = "./Outputs/Drift_Diffusion_2D_IV_Simple_HTL_Free_Carbon_Device_IONS/VoltageSweep/"
 
@@ -29,18 +28,9 @@ RecombinationMatrix = np.load(Simulation_folder + "RecombinationMatrix.npy")
 RadiativeRecombinationMatrix = np.load(Simulation_folder + "Recombination_Bimolecular_EQMatrix.npy")
 PMatrix = np.load(Simulation_folder + "PMatrix.npy")
 NMatrix = np.load(Simulation_folder + "NMatrix.npy")
-Jn_Matrix = np.load(Simulation_folder + "Jn_Matrix.npy")[:,1,:,:]
-Jp_Matrix = np.load(Simulation_folder + "Jp_Matrix.npy")[:,1,:,:]
+Jn_Matrix = np.load(Simulation_folder + "ConservativeJnInternal.npy")
+Jp_Matrix = np.load(Simulation_folder + "ConservativeJpInternal.npy")
 JTotal_Y = (Jn_Matrix + Jp_Matrix)
-
-for i in range(Jn_Matrix.shape[0]):
-    Jn_Matrix[i] = signal.medfilt2d(Jn_Matrix[i], kernel_size=5)
-
-for i in range(Jp_Matrix.shape[0]):
-    Jp_Matrix[i] = signal.medfilt2d(Jp_Matrix[i], kernel_size=5)
-
-for i in range(JTotal_Y.shape[0]):
-    JTotal_Y[i] = signal.medfilt2d(JTotal_Y[i], kernel_size=5)
 
 JTotal_Y_mean = np.mean(JTotal_Y[:,20:80,:], axis=(1, 2))
 VocLocation = np.unravel_index(np.argmin(np.abs(JTotal_Y_mean)), JTotal_Y_mean.shape)
@@ -58,7 +48,7 @@ CationDensityMatrix = np.load(Simulation_folder + "CationDensityMatrix.npy")
 AnionDensityMatrix = AnionDensityMatrix.reshape((AnionDensityMatrix.shape[0], NMatrix.shape[1], NMatrix.shape[2]))
 CationDensityMatrix = CationDensityMatrix.reshape((CationDensityMatrix.shape[0], NMatrix.shape[1], NMatrix.shape[2]))
 ResidualMatrix = np.load(Simulation_folder + "ResidualMatrix.npy")
-ResidualArray = np.load(Simulation_folder + "residualarray.npy")[:]
+ResidualArray = np.load(Simulation_folder + "ResidualArray.npy")[:]
 
 SweepCounterMatrix = np.load(Simulation_folder + "SweepCounterMatrix.npy")
 applied_voltages = np.load(Simulation_folder + "applied_voltages.npy")

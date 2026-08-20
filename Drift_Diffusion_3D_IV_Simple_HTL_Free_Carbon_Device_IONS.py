@@ -7,7 +7,7 @@ os.environ["OMP_NUM_THREADS"] = "1" #Really important! Pysparse doesnt benefit f
 import numpy as np
 from mark_interface_file import mark_interfaces, mark_interfaces_mixed
 from calculate_absorption import calculate_absorption_above_bandgap
-from fipy import CellVariable, TransientTerm, DiffusionTerm, ExponentialConvectionTerm
+from fipy import TransientTerm, DiffusionTerm, ExponentialConvectionTerm
 import fipy
 from fipy.tools import numerix
 import time
@@ -21,6 +21,7 @@ from BoundaryConditions import ohmic
 from constantsfile import TInfinite, q, epsilon_0, D
 from LoadSolarSpectrum import SolarSpectrumWavelength, SolarSpectrumIrradiance
 from workflow_utils import append_to_npy, run_sweep
+from electrical_numerics import as_cell_array, cell_variable, conservative_internal_face_currents, terminal_current_densities
 
 Carbon_ID = name_to_code_EL["Carbon"]
 PS_ID = name_to_code_SC["PS"]
@@ -135,28 +136,10 @@ SRH_Bulk_Recombination_Zone = np.where(SRH_Bulk_Recombination_Zone < 0, 0.00, SR
 
 mesh = fipy.Grid3D(dx=dx, dy=dy, dz=dz, nx=nz, ny=nx, nz=ny)
 
-gen_rate = CellVariable(name="Generation Rate", mesh=mesh, value=GenRate_values_default)
-Recombination_Langevin_Cell = CellVariable(name="Recombination_Langevin_Cell", mesh=mesh, value=Recombination_Langevin_values)
-Recombination_Bimolecular_Cell = CellVariable(name="Recombination_Bimolecular_Cell", mesh=mesh, value=Recombination_Bimolecular_values)
-Recombination_Interfacial_SRH_Cell = CellVariable(name="Recombination_SRH_Cell", mesh=mesh, value=SRH_Interfacial_Recombination_Zone)
-Recombination_Bulk_SRH_Cell = CellVariable(name="Recombination_SRH_Cell", mesh=mesh, value=SRH_Bulk_Recombination_Zone)
-
-nmob = CellVariable(name="electron mobility", mesh=mesh, value=nmob_values)
-pmob = CellVariable(name="hole mobility", mesh=mesh, value=pmob_values)
-anionmob = CellVariable(name="anion mobility", mesh=mesh, value=anion_mob_values)
-cationmob = CellVariable(name="cation mobility", mesh=mesh, value=cation_mob_values)
-
-epsilon = CellVariable(name="dielectric permittivity", mesh=mesh, value=epsilon_values)
-LogNcCell = CellVariable(name="Log Effective Density of States CB", mesh=mesh, value=LogNc)
-LogNvCell = CellVariable(name="Log Effective Density of States VB", mesh=mesh, value=LogNv)
-
-ChiCell = CellVariable(name="Electron Affinity", mesh=mesh, value=chi)
-ChiCell_a = CellVariable(name="Electron Affinity", mesh=mesh, value=chi_a)
-ChiCell_c = CellVariable(name="Electron Affinity", mesh=mesh, value=chi_c)
-EgCell = CellVariable(name="Band Gap", mesh=mesh, value=Eg)
-
-NdCell = CellVariable(name="Fixed Ionised Donors", mesh=mesh, value=Nd_values)
-NaCell = CellVariable(name="Fixed Ionised Acceptor", mesh=mesh, value=Na_values)
+(gen_rate, Recombination_Langevin_Cell, Recombination_Bimolecular_Cell, Recombination_Interfacial_SRH_Cell, Recombination_Bulk_SRH_Cell) = [cell_variable(mesh, name, values) for name, values in (("Generation Rate", GenRate_values_default), ("Recombination_Langevin_Cell", Recombination_Langevin_values), ("Recombination_Bimolecular_Cell", Recombination_Bimolecular_values), ("Recombination_SRH_Cell", SRH_Interfacial_Recombination_Zone), ("Recombination_SRH_Cell", SRH_Bulk_Recombination_Zone))]
+(nmob, pmob, anionmob, cationmob) = [cell_variable(mesh, name, values) for name, values in (("electron mobility", nmob_values), ("hole mobility", pmob_values), ("anion mobility", anion_mob_values), ("cation mobility", cation_mob_values))]
+(epsilon, LogNcCell, LogNvCell) = [cell_variable(mesh, name, values) for name, values in (("dielectric permittivity", epsilon_values), ("Log Effective Density of States CB", LogNc), ("Log Effective Density of States VB", LogNv))]
+(ChiCell, ChiCell_a, ChiCell_c, EgCell, NdCell, NaCell) = [cell_variable(mesh, name, values) for name, values in (("Electron Affinity", chi), ("Electron Affinity", chi_a), ("Electron Affinity", chi_c), ("Band Gap", Eg), ("Fixed Ionised Donors", Nd_values), ("Fixed Ionised Acceptor", Na_values))]
 
 nTop, pTop = ohmic(TopLocationSC, TopElectrode)
 nBottom, pBottom = ohmic(BottomLocationSC, BottomElectrode)
@@ -188,11 +171,9 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
     solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1, tolerance=1e-10) #Works out of the box with fipy installation
 
-    philocal = CellVariable(name="electrostatic potential", mesh=mesh, value=phi_values, hasOld=True)
-    nlocal = CellVariable(name="electron density", mesh=mesh, value=n_values, hasOld=True)
-    plocal = CellVariable(name="hole density", mesh=mesh, value=p_values, hasOld=True)
-    alocal = CellVariable(name="anion density", mesh=mesh, value=a_values, hasOld=True)
-    clocal = CellVariable(name="cation density", mesh=mesh, value=c_values, hasOld=True)
+    state_names = ("electrostatic potential", "electron density", "hole density", "anion density", "cation density")
+    state_values = (phi_values, n_values, p_values, a_values, c_values)
+    philocal, nlocal, plocal, alocal, clocal = [cell_variable(mesh, name, value, True) for name, value in zip(state_names, state_values)]
 
     contact_bcs = [
         {'boundary': mesh.facesBack, 'n': nTop, 'p': pTop, 'phi': 0.00},
@@ -265,22 +246,25 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
         TotalTime += dt
 
-        print("Sweep: ", SweepCounter, "TotalTime: ", TotalTime, "Residual: ", residual, "Time for sweep: ", time.time() - t0, "dt: ", dt, "Percentage Improvement: ", PercentageImprovementPerSweep, "Damping: ", DampingFactor)
+        if SweepCounter == 0 or SweepCounter % 25 == 0 or residual <= desired_residual:
+            print("Sweep: ", SweepCounter, "TotalTime: ", TotalTime, "Residual: ", residual, "Time for sweep: ", time.time() - t0, "dt: ", dt, "Percentage Improvement: ", PercentageImprovementPerSweep, "Damping: ", DampingFactor)
         SweepCounter += 1
 
     # Here the electron and hole quasi-fermi levels are calculated
     psinvar = LUMO - D * (numerix.log(nlocal) - LogNcCell)
     psipvar = HOMO + D * (numerix.log(plocal) - LogNvCell)
 
-    #Here the electron and hole current densities are calculated
+    # Here the electric field is calculated
     E = -philocal.grad.globalValue
-    Jn = (q * nmob.globalValue * nlocal.globalValue * -psinvar.grad.globalValue)
-    Jp = (q * pmob.globalValue * plocal.globalValue * -psipvar.grad.globalValue)
-    Jn_Matrix, Jp_Matrix, Efield_matrix = [np.reshape(X, (X.shape[0], ny, nx)) for X in (Jn, Jp, E)]
+    Efield_matrix = np.reshape(E, (E.shape[0], ny, nx, nz))
+
+    n_array, p_array, phi_array, chi_array, eg_array, log_nc_array, log_nv_array, nmob_array, pmob_array = [as_cell_array(field, DeviceArchitechture.shape) for field in (nlocal, plocal, philocal, ChiCell, EgCell, LogNcCell, LogNvCell, nmob, pmob)]
+    ConservativeJnInternal, ConservativeJpInternal = conservative_internal_face_currents(n_array, p_array, phi_array, chi_array, eg_array, log_nc_array, log_nv_array, nmob_array, pmob_array, axis=0, spacing=dy, thermal_voltage=D)
+    BottomTerminalCurrentDensity, TopTerminalCurrentDensity, TerminalCurrentDensity = terminal_current_densities(ConservativeJnInternal, ConservativeJpInternal)
 
     (PotentialMatrix, GenValues_Matrix, RecombinationMatrix, Recombination_Bimolecular_EQMatrix, NMatrix, PMatrix, chiMatrix, EgMatrix, psinvarmatrix, psipvarmatrix) = [np.reshape(arr,(ny, nx)) for arr in (philocal, gen_rate, Recombination_Combined, Recombination_Bimolecular_EQ, nlocal, plocal, ChiCell, EgCell, psinvar, psipvar)]
 
-    return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue, "p": plocal.globalValue, "phi": philocal.globalValue, "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue, "CationDensityMatrix": clocal.globalValue, "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Jn_Matrix": Jn_Matrix, "Jp_Matrix": Jp_Matrix, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix, "residualarray": residualarray}
+    return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue.copy(), "p": plocal.globalValue.copy(), "phi": philocal.globalValue.copy(), "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue.copy(), "CationDensityMatrix": clocal.globalValue.copy(), "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Converged": bool(residual <= desired_residual), "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix, "ResidualArray": residualarray, "ConservativeJnInternal": ConservativeJnInternal, "ConservativeJpInternal": ConservativeJpInternal, "TerminalCurrentDensity": TerminalCurrentDensity, "BottomTerminalCurrentDensity": BottomTerminalCurrentDensity, "TopTerminalCurrentDensity": TopTerminalCurrentDensity}
 
 def simulate_device(output_dir):
 

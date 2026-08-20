@@ -8,15 +8,17 @@ from scipy.interpolate import interp1d
 from plotting_utils import median_filter_1d
 
 # Load data
-Simulation_folder = "./Outputs/Drift_Diffusion_1D_IV_IONS_NIP_Example/VoltageSweep/"
+Simulation_folder = "./Outputs/Drift_Diffusion_1D_IV_IONS_PN_Example/VoltageSweep/"
 NumberOfSuns = 1.00
 
 GenerationMatrix = np.load(Simulation_folder + "GenValues_Matrix.npy")[:]
 RecombinationMatrix = np.load(Simulation_folder + "RecombinationMatrix.npy")[:]
 PMatrix = np.load(Simulation_folder + "p.npy")[:]
 NMatrix = np.load(Simulation_folder + "n.npy")[:]
-Jn_Matrix = np.load(Simulation_folder + "Jn_Matrix.npy")[:,1,:,:]
-Jp_Matrix = np.load(Simulation_folder + "Jp_Matrix.npy")[:,1,:,:]
+
+Jn_Matrix = np.load(Simulation_folder + "ConservativeJnInternal.npy")
+Jp_Matrix = np.load(Simulation_folder + "ConservativeJpInternal.npy")
+
 JTotal_Y = (Jn_Matrix + Jp_Matrix)
 PotentialMatrix = np.load(Simulation_folder + "phi.npy")[:]
 EField_matrix = -np.load(Simulation_folder + "Efield_matrix.npy")[:,1,:,:]
@@ -45,16 +47,6 @@ ax4.legend()
 plt.show(block=False)
 
 print("SweepCounterMatrix", SweepCounterMatrix)
-
-for i in range(JTotal_Y.shape[0]):
-    JTotal_Y_Flattened = median_filter_1d(JTotal_Y[i].flatten(), 5)
-    JTotal_Y[i] = np.expand_dims(JTotal_Y_Flattened, axis=1)
-for i in range(Jn_Matrix.shape[0]):
-    Jn_Matrix_Flattened = median_filter_1d(Jn_Matrix[i].flatten(), 5)
-    Jn_Matrix[i] = np.expand_dims(Jn_Matrix_Flattened, axis=1)
-for i in range(Jp_Matrix.shape[0]):
-    Jp_Matrix_Flattened = median_filter_1d(Jp_Matrix[i].flatten(), 5)
-    Jp_Matrix[i] = np.expand_dims(Jp_Matrix_Flattened, axis=1)
 
 AnionDensityMatrix = np.load(Simulation_folder + "AnionDensityMatrix.npy")[:]
 CationDensityMatrix = np.load(Simulation_folder + "CationDensityMatrix.npy")[:]

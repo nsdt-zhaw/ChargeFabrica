@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from plotting_utils import median_filter_1d
 
 #Plotting code for Spatial Collection Efficiency (SCE) calculation from 1D drift-diffusion simulation data
 Simulation_folder = "./Outputs/1D_NIP_SCE_Example/VoltageSweep/"
@@ -10,19 +9,9 @@ GenValues_Matrix_SCE = np.load(Simulation_folder + "GenValues_Matrix.npy")[1:]
 
 Position_SCE = np.load(Simulation_folder + "excitation_indices.npy")[0:GenValues_Matrix_SCE.shape[0]]
 
-Jn_Matrix = np.load(Simulation_folder + "Jn_Matrix.npy")[:,1,:,:]
-Jp_Matrix = np.load(Simulation_folder + "Jp_Matrix.npy")[:,1,:,:]
+Jn_Matrix = np.load(Simulation_folder + "ConservativeJnInternal.npy")
+Jp_Matrix = np.load(Simulation_folder + "ConservativeJpInternal.npy")
 JTotal_Y = (Jn_Matrix + Jp_Matrix)
-
-for i in range(JTotal_Y.shape[0]):
-    JTotal_Y_Flattened = median_filter_1d(JTotal_Y[i].flatten(), 5)
-    JTotal_Y[i] = np.expand_dims(JTotal_Y_Flattened, axis=1)
-for i in range(Jn_Matrix.shape[0]):
-    Jn_Matrix_Flattened = median_filter_1d(Jn_Matrix[i].flatten(), 5)
-    Jn_Matrix[i] = np.expand_dims(Jn_Matrix_Flattened, axis=1)
-for i in range(Jp_Matrix.shape[0]):
-    Jp_Matrix_Flattened = median_filter_1d(Jp_Matrix[i].flatten(), 5)
-    Jp_Matrix[i] = np.expand_dims(Jp_Matrix_Flattened, axis=1)
 
 JTotal_Y_default = JTotal_Y[0]
 JTotal_Y_SCE = JTotal_Y[1:]

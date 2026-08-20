@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from plotting_utils import median_filter_1d
 
 # Requires a completed EQE simulation folder
 Simulation_folder = "./Outputs/1D_NIP_EQE_2Bird/WavelengthSweep/"
@@ -9,24 +8,14 @@ NumberOfSuns = 1.00
 ScalingFactor = 1.00
 
 # Load matrices as before
-Jn_Y = np.load(Simulation_folder + "Jn_Matrix.npy")[:,1,:,:]
-Jp_Y = np.load(Simulation_folder + "Jp_Matrix.npy")[:,1,:,:]
+Jn_Y = np.load(Simulation_folder + "ConservativeJnInternal.npy")
+Jp_Y = np.load(Simulation_folder + "ConservativeJpInternal.npy")
 JTotal_Y = Jn_Y + Jp_Y
 PhotonFluxMatrix = np.load(Simulation_folder + "PhotonFluxArrayFinal.npy")
 PhotonFluxArrayOriginal = np.load(Simulation_folder + "PhotonFluxArrayOriginal.npy")
 PhotonFluxArrayOriginalSplit = np.load(Simulation_folder + "PhotonFluxArrayOriginalSplit.npy")
 PhotonFluxPerturbation = PhotonFluxMatrix - PhotonFluxArrayOriginal
 applied_wavelengths = np.load(Simulation_folder + "applied_wavelengths.npy")
-
-for i in range(JTotal_Y.shape[0]):
-    JTotal_Y_Flattened = median_filter_1d(JTotal_Y[i].flatten(), 5)
-    JTotal_Y[i] = np.expand_dims(JTotal_Y_Flattened, axis=1)
-for i in range(Jn_Y.shape[0]):
-    Jn_Y_Flattened = median_filter_1d(Jn_Y[i].flatten(), 5)
-    Jn_Y[i] = np.expand_dims(Jn_Y_Flattened, axis=1)
-for i in range(Jp_Y.shape[0]):
-    Jp_Y_Flattened = median_filter_1d(Jp_Y[i].flatten(), 5)
-    Jp_Y[i] = np.expand_dims(Jp_Y_Flattened, axis=1)
 
 JTotal_Y_mean = -np.mean(JTotal_Y[:,20:80,:], axis=(1, 2))
 Jsc1Sun = JTotal_Y_mean[0]

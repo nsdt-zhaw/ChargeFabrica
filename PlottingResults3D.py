@@ -5,9 +5,6 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from matplotlib.widgets import Slider
 from scipy.interpolate import interp1d
-from scipy import signal
-from scipy.signal import medfilt2d
-from scipy.ndimage.filters import median_filter
 import copy
 
 Simulation_folder = "D:\Backup\Massive_Finger_SRH_Comparison\Drift_Diffusion_3D_IV_Simple_HTL_Free_Carbon_Device_IONS/VoltageSweep/"
@@ -33,32 +30,12 @@ PMatrix = np.load(Simulation_folder + "PMatrix.npy")                          # 
 NMatrix = np.load(Simulation_folder + "NMatrix.npy")                          # (V, Y, X, Z)
 NMatrixShapeFull = NMatrix.shape                                              # (V, Y, X, Z)
 
-#Load full vector fields (voltage, vector_component, y, x, z)
-Jn_Matrix_Vector = -np.load(Simulation_folder + "Jn_Matrix.npy")
-Jp_Matrix_Vector = -np.load(Simulation_folder + "Jp_Matrix.npy")
-JTotal_Vector = (Jn_Matrix_Vector + Jp_Matrix_Vector)
-
-#Extract y-component images as 4D (V, Y, X, Z); keep z dimension
-#Note: You previously labeled component index 2 as "y-component" for images.
-Jn_Matrix = -Jn_Matrix_Vector[:, 2, :, :, :]  # (V, Y, X, Z)
-Jp_Matrix = -Jp_Matrix_Vector[:, 2, :, :, :]  # (V, Y, X, Z)
+# Load conservative currents on internal faces (voltage, y-face, x, z).
+Jn_Matrix = np.load(Simulation_folder + "ConservativeJnInternal.npy")
+Jp_Matrix = np.load(Simulation_folder + "ConservativeJpInternal.npy")
 
 #Total y-component
 JTotal_Y = (Jn_Matrix + Jp_Matrix)  # (V, Y, X, Z)
-
-FilteringNeeded = True
-KernelSize = 5
-if FilteringNeeded:
-# Smooth the scalar (y-component) images for visualization, per-frame and per z-slice
-    for i in range(Jn_Matrix.shape[0]):
-        for z in range(Jn_Matrix.shape[3]):
-            Jn_Matrix[i, :, :, z] = median_filter(Jn_Matrix[i, :, :, z], (KernelSize, KernelSize))
-    for i in range(Jp_Matrix.shape[0]):
-        for z in range(Jp_Matrix.shape[3]):
-            Jp_Matrix[i, :, :, z] = median_filter(Jp_Matrix[i, :, :, z], (KernelSize, KernelSize))
-    for i in range(JTotal_Y.shape[0]):
-        for z in range(JTotal_Y.shape[3]):
-            JTotal_Y[i, :, :, z] = median_filter(JTotal_Y[i, :, :, z], (KernelSize, KernelSize))
 
 #Quick 1D debug plot at initial z=0 (optional)
 plt.figure()
@@ -184,29 +161,7 @@ if len(applied_voltages) > 3:
     axs[-1].set_ylim(-210, 260)
     axs[-1].set_xlim(-0.1, 2.4)
 
-#Prepare streamplot overlay on the "JTotal_Y (A/m2)" panel
-ax_stream_idx = titles.index("JTotal_Y (A/m2)")
-ny, nx = Jn_Matrix_Vector.shape[2], Jn_Matrix_Vector.shape[3]
-x_coords = np.arange(nx)
-y_coords = np.arange(ny)
-stream_container = None  # will hold the StreamplotSet
-
-def remove_streamplot(container):
-    if container is None:
-        return
-
-#try:
-#    # Properly remove previous streamplot artists
-#    for coll in container.lines.collections:
-#    coll.remove()
-#    for art in container.arrows:
-#    art.remove()
-#    except Exception:
-#    pass
-
 def update(val):
-    global stream_container
-
     voltage = slider.val
     frame = int(np.clip(np.round(interp_indices(voltage)), 0, len(applied_voltages) - 1))
 
@@ -220,25 +175,6 @@ def update(val):
         images[i].set_clim(vmin, vmax)
         colorbars[i].update_normal(images[i])
         axs[i].set_title("{} at {:.3f} V, z={}".format(titles[i], applied_voltages[frame], z_idx))
-
-    # Update streamplot (still disabled by default)
-    UpdateSteamplot = False
-    if UpdateSteamplot:
-        # Save current view limits to preserve zoom/pan
-        xlimbefore = axs[ax_stream_idx].get_xlim()
-        ylimbefore = axs[ax_stream_idx].get_ylim()
-
-        remove_streamplot(stream_container)
-
-        # Use X and Y components at current z
-        U = JTotal_Vector[frame, 0, :, :, z_idx]
-        V = JTotal_Vector[frame, 1, :, :, z_idx]
-        stream_container = axs[ax_stream_idx].streamplot(
-            x_coords, y_coords, U, V, density=1
-        )
-
-        axs[ax_stream_idx].set_xlim(xlimbefore)
-        axs[ax_stream_idx].set_ylim(ylimbefore)
 
 fig.canvas.draw_idle()
 #Initial draw
