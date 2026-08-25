@@ -8,7 +8,7 @@ from scipy.interpolate import interp1d
 from plotting_utils import median_filter_1d
 
 # Load data
-Simulation_folder = "./Outputs/Drift_Diffusion_1D_IV_IONS_PN_Example/VoltageSweep/"
+Simulation_folder = "./Outputs/Drift_Diffusion_1D_IV_IONS_NIP_Example/VoltageSweep/"
 NumberOfSuns = 1.00
 
 GenerationMatrix = np.load(Simulation_folder + "GenValues_Matrix.npy")[:]
