@@ -7,7 +7,7 @@ from matplotlib.widgets import Slider
 from scipy.interpolate import interp1d
 import copy
 
-Simulation_folder = "D:\Backup\Massive_Finger_SRH_Comparison\Drift_Diffusion_3D_IV_Simple_HTL_Free_Carbon_Device_IONS/VoltageSweep/"
+Simulation_folder = "./Outputs/Drift_Diffusion_3D_IV_Simple_HTL_Free_Carbon_Device_IONS/VoltageSweep/"
 NumberOfSuns = 1.00
 
 class PercentileNormalizer(Normalize):
