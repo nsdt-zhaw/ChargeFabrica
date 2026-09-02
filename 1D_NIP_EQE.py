@@ -174,13 +174,13 @@ def solve_for_wavelength(voltage, n_values, p_values, a_values, c_values, phi_va
 
     underRelaxation = 1.
 
-    deqn = ((0.00 == -TransientTerm(coeff=q, var=dnlocal) + DiffusionTerm(coeff=q * D * nmob.harmonicFaceValue, var=dnlocal) - ExponentialConvectionTerm( coeff=q * nmob.harmonicFaceValue * (LUMO + D * LogNcCell).faceGrad, var=dnlocal) - DiffusionTerm(coeff=q * D * nmob.harmonicFaceValue * nlocal.harmonicFaceValue,var=dphilocal) - recombination_correction) + ResidualTerm(equation=eqn, underRelaxation=underRelaxation))
-    deqp = ((0.00 == -TransientTerm(coeff=q, var=dplocal) + DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=dplocal) + ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * (HOMO - D * LogNvCell).faceGrad, var=dplocal) + DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue * plocal.harmonicFaceValue, var=dphilocal) - recombination_correction) + ResidualTerm(equation=eqp, underRelaxation=underRelaxation))
+    deqn = ((0.00 == -TransientTerm(coeff=q, var=dnlocal) + DiffusionTerm(coeff=q * D * nmob.harmonicFaceValue, var=dnlocal) - ExponentialConvectionTerm( coeff=q * nmob.harmonicFaceValue * (LUMO + D * LogNcCell).faceGrad, var=dnlocal) - recombination_correction) + ResidualTerm(equation=eqn, underRelaxation=underRelaxation))
+    deqp = ((0.00 == -TransientTerm(coeff=q, var=dplocal) + DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=dplocal) + ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * (HOMO - D * LogNvCell).faceGrad, var=dplocal) - recombination_correction) + ResidualTerm(equation=eqp, underRelaxation=underRelaxation))
     deqa = ((0.00 == -TransientTerm(coeff=q, var=dalocal) + DiffusionTerm(coeff=q * D * anionmob.harmonicFaceValue, var=dalocal) - ExponentialConvectionTerm(coeff=q * anionmob.harmonicFaceValue * LUMO_a.faceGrad, var=dalocal)) + ResidualTerm(equation=eqa, underRelaxation=underRelaxation))
     deqc = ((0.00 == -TransientTerm(coeff=q, var=dclocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=dclocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * LUMO_c.faceGrad, var=dclocal)) + ResidualTerm(equation=eqc, underRelaxation=underRelaxation))
     deqpoisson = ((0.00 == -TransientTerm(var=dphilocal) + DiffusionTerm(coeff=epsilon, var=dphilocal) + (q / epsilon_0) * (dplocal - dnlocal + dclocal - dalocal)) + ResidualTerm(equation=eqpoisson, underRelaxation=underRelaxation))
 
-    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_timesteps = 1e-7, 1e-6, 1e-10, 0.03, 1, 2000
+    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_timesteps = 1e-7, 1e-6, 1e-10, 0.1, 1, 2000
     residual, residual_old, dt_old, TotalTime, SweepCounter = 1., 1e10, dt, 0.0, 0
     residualarray = np.zeros(max_timesteps)
 
@@ -189,6 +189,12 @@ def solve_for_wavelength(voltage, n_values, p_values, a_values, c_values, phi_va
         t0 = time.time()
 
         for i in range(NumberofSweeps):
+            # Each outer sweep linearizes around the newly accepted state.
+            # Newton increments from the previous linearization must not enter
+            # the new off-diagonal Jacobian terms as explicit source values.
+            for correction in (dphilocal, dnlocal, dplocal, dalocal, dclocal):
+                correction.setValue(0.0)
+
             deqpoisson.sweep(dt=dt, solver=solver)
             philocal.setValue(DampingFactor * (philocal + dphilocal) + (1 - DampingFactor) * philocal.old) # The potential should be damped BEFORE passing to the continuity equations!
 
