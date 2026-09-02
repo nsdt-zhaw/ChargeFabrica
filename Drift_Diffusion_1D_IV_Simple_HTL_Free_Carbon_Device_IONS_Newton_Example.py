@@ -136,7 +136,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     philocal, nlocal, plocal, alocal, clocal = [cell_variable(mesh, name, value, True) for name, value in zip(state_names, state_values)]
 
     correction_names = ('d_hole', 'd_electron', 'd_anion', 'd_cation', 'd_potential')
-    dplocal, dnlocal, dalocal, dclocal, dphilocal = [cell_variable(mesh, name, has_old=True) for name in correction_names]
+    dplocal, dnlocal, dalocal, dclocal, dphilocal = [cell_variable(mesh, name, has_old=False) for name in correction_names]
 
     contact_bcs = [
         {'boundary': mesh.facesTop, 'n': nTop, 'p': pTop, 'phi': 0},
@@ -186,7 +186,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     deqc = ((0.00 == -TransientTerm(coeff=q, var=dclocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=dclocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * LUMO_c.faceGrad, var=dclocal)) + ResidualTerm(equation=eqc, underRelaxation=underRelaxation))
     deqpoisson = ((0.00 == -TransientTerm(var=dphilocal) + DiffusionTerm(coeff=epsilon, var=dphilocal) + (q / epsilon_0) * (dplocal - dnlocal + dclocal - dalocal)) + ResidualTerm(equation=eqpoisson, underRelaxation=underRelaxation))
 
-    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_timesteps = 1.00e-7, 1.00e-5, 1e-10, 0.02, 1, 2000
+    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_timesteps = 1.00e-7, 1.00e-5, 1e-10, 0.05, 1, 2000
     residual, residual_old, dt_old, TotalTime, SweepCounter = 1., 1e10, dt, 0.0, 0
     residualarray = np.zeros(max_timesteps)
 
@@ -221,7 +221,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
         dt_old, residual_old = dt, residual
 
         # Update old
-        for v in (nlocal, plocal, alocal, clocal, philocal, dnlocal, dplocal, dalocal, dclocal, dphilocal): v.updateOld()
+        for v in (nlocal, plocal, alocal, clocal, philocal): v.updateOld()
 
         TotalTime += dt
 
@@ -247,7 +247,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
 def simulate_device(output_dir):
 
-    applied_voltages = np.arange(0.0, 1.15, 0.05)
+    applied_voltages = np.arange(0.0, 1.25, 0.025)
 
     chunk_size = min(len(applied_voltages), max(1, multiprocessing.cpu_count() - 1))
 

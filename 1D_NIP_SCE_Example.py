@@ -138,7 +138,7 @@ def solve_for_excitation_site(excitation_index, n_values, p_values, a_values, c_
     philocal, nlocal, plocal, alocal, clocal = [cell_variable(mesh, name, value, True) for name, value in zip(state_names, state_values)]
 
     correction_names = ('d_hole', 'd_electron', 'd_anion', 'd_cation', 'd_potential')
-    dplocal, dnlocal, dalocal, dclocal, dphilocal = [cell_variable(mesh, name, has_old=True) for name in correction_names]
+    dplocal, dnlocal, dalocal, dclocal, dphilocal = [cell_variable(mesh, name, has_old=False) for name in correction_names]
 
     if excitation_index == -1:
         SCERegion = np.zeros(np.size(DeviceArchitechture))
@@ -236,7 +236,7 @@ def solve_for_excitation_site(excitation_index, n_values, p_values, a_values, c_
         dt_old, residual_old = dt, residual
 
         # Update old
-        for v in (nlocal, plocal, alocal, clocal, philocal, dnlocal, dplocal, dalocal, dclocal, dphilocal): v.updateOld()
+        for v in (nlocal, plocal, alocal, clocal, philocal): v.updateOld()
 
         TotalTime += dt
 

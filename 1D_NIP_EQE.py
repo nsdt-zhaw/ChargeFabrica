@@ -127,7 +127,7 @@ def solve_for_wavelength(voltage, n_values, p_values, a_values, c_values, phi_va
     gen_rate.setValue(GenRate_values_default)
 
     correction_names = ('d_hole', 'd_electron', 'd_anion', 'd_cation', 'd_potential')
-    dplocal, dnlocal, dalocal, dclocal, dphilocal = [cell_variable(mesh, name, has_old=True) for name in correction_names]
+    dplocal, dnlocal, dalocal, dclocal, dphilocal = [cell_variable(mesh, name, has_old=False) for name in correction_names]
 
     contact_bcs = [
         {'boundary': mesh.facesTop, 'n': nTop, 'p': pTop, 'phi': (Vbi + voltage)},
@@ -215,7 +215,7 @@ def solve_for_wavelength(voltage, n_values, p_values, a_values, c_values, phi_va
         dt_old, residual_old = dt, residual
 
         # Update old
-        for v in (nlocal, plocal, alocal, clocal, philocal, dnlocal, dplocal, dalocal, dclocal, dphilocal): v.updateOld()
+        for v in (nlocal, plocal, alocal, clocal, philocal): v.updateOld()
 
         TotalTime = TotalTime + dt
 
