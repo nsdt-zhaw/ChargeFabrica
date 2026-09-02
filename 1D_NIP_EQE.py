@@ -190,23 +190,18 @@ def solve_for_wavelength(voltage, n_values, p_values, a_values, c_values, phi_va
 
         for i in range(NumberofSweeps):
             deqpoisson.sweep(dt=dt, solver=solver)
-            philocal.value = philocal.value + dphilocal.value
-            philocal.setValue(DampingFactor * philocal + (1 - DampingFactor) * philocal.old) # The potential should be damped BEFORE passing to the continuity equations!
+            philocal.setValue(DampingFactor * (philocal + dphilocal) + (1 - DampingFactor) * philocal.old) # The potential should be damped BEFORE passing to the continuity equations!
 
             residual = deqn.sweep(dt=dt, solver=solver) + deqp.sweep(dt=dt, solver=solver)
-            nlocal.value = nlocal.value + dnlocal.value
-            plocal.value = plocal.value + dplocal.value
-            nlocal.setValue(DampingFactor * np.maximum(nlocal, 1.00e-30) + (1 - DampingFactor) * nlocal.old)
-            plocal.setValue(DampingFactor * np.maximum(plocal, 1.00e-30) + (1 - DampingFactor) * plocal.old)
+            nlocal.setValue(DampingFactor * np.maximum(nlocal + dnlocal, 1.00e-30) + (1 - DampingFactor) * nlocal.old)
+            plocal.setValue(DampingFactor * np.maximum(plocal + dplocal, 1.00e-30) + (1 - DampingFactor) * plocal.old)
 
         EnableIons = True
         if EnableIons:
             #Here the ionic continuity equations are solved
             residual += deqa.sweep(dt=dt/10, solver=solver) + deqc.sweep(dt=dt/10, solver=solver)
-            alocal.value = alocal.value + dalocal.value
-            clocal.value = clocal.value + dclocal.value
-            alocal.setValue(DampingFactor * alocal + (1 - DampingFactor) * alocal.old)
-            clocal.setValue(DampingFactor * clocal + (1 - DampingFactor) * clocal.old)
+            alocal.setValue(DampingFactor * (alocal + dalocal) + (1 - DampingFactor) * alocal.old)
+            clocal.setValue(DampingFactor * (clocal + dclocal) + (1 - DampingFactor) * clocal.old)
 
         residualarray[SweepCounter] = residual
 
