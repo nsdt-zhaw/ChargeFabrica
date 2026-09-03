@@ -10,7 +10,7 @@ Authors: Tristan Sachsenweger, Miguel A. Torre Cachafeiro, Wolfgang Tress
 2. [Installation](#installation)
 3. [QuickStart](#quickstart)
 4. [Video Tutorials](#video-tutorials)
-5. [Computation Time](#computation-time)
+5. [Computation Time](#computation-time-using-newton-method)
 6. [Units and Formatting](#units-and-formatting)
 7. [Numerics and Damping](#numerics-and-damping)
 8. [How to cite](#how-to-cite)
@@ -64,10 +64,10 @@ Here we provide a list of instructional videos to help new users get familiar wi
 
 1  [Installation and QuickStart Tutorial](https://www.youtube.com/watch?v=Io8mPTLpUPw)
 
-## Computation Time
-The 1D compute time with ions enabled on a Intel(R) Core(TM) i9-12900 desktop PC is roughly 1-2 minutes.
+## Computation Time using Newton method
+The 1D compute time with ions enabled on a Intel(R) Core(TM) i9-12900 desktop PC is roughly 30 seconds.
 
-The 2D compute time with ions enabled on a dedicated server with AMD EPYC 74F3 processor for ~100k elements is roughly 2 hours.
+The 2D compute time with ions enabled on a dedicated server with AMD EPYC 74F3 processor for ~100k elements is roughly 45 minutes.
 
 It is therefore **strongly** recommended to test the code in 1D before moving to 2D.
 
