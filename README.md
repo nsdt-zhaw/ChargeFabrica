@@ -20,25 +20,25 @@ Authors: Tristan Sachsenweger, Miguel A. Torre Cachafeiro, Wolfgang Tress
 ChargeFabrica uses [fipy](https://github.com/usnistgov/fipy) to solve the semiconductor equations in 1D, 2D or 3D, thereby determining the electrostatic potential, charge density distributions for electrons, holes and mobile ions and the resulting current-voltage relationships. Furthermore, Beer–Lambert generation, various recombination mechanisms, PL Yield, external quantum efficiency (EQE), spatial collection efficiency (SCE) and ion preconditioning can be modelled. The solver is designed to handle arbitrary semiconductor geometries, which can be defined within a numpy array.
 
 ### Example Problems:
+---
 <div class="grid cards" markdown>
 
 -   1D Simulation plot for FTO (Boundary)|TiO2 (50 nm)|MAPbI3 (1600 nm)|Carbon (Boundary) Cell
 -   Source file: [DD_1D_HTL_Free_Carbon_Device_IONS_Newton_Example.py](DD_1D_HTL_Free_Carbon_Device_IONS_Newton_Example.py)
+<img src="https://github.com/user-attachments/assets/b30c3bcc-a48d-4661-9de1-8ffa65a27a80" width="400">
 
-    ---
-    
-    <img src="https://github.com/user-attachments/assets/b30c3bcc-a48d-4661-9de1-8ffa65a27a80" width="400">
+---
 
-- 1D Simulation plots for EQE and SCE for NIP cells:
-  
-  ---
+-  1D Simulation plots for EQE and SCE for NIP cells:
   <img height="250" alt="image" src="https://github.com/user-attachments/assets/6e9a66e9-aa1e-49d2-8d65-5dbf7aff0128" />
   <img height="250" alt="image" src="https://github.com/user-attachments/assets/4594abeb-013a-4853-aa4d-bb2e6532e6bb" />
+  
+---
 
 -   2D Simulation plot for carbon-based triple mesoscopic HTL-free device: FTO (Boundary)|TiO2 (50 nm)|m-TiO2/MAPbI3 (150 nm)|m-ZrO2/MAPbI3 (1000 nm)|MAPbI3 (100 nm)|Carbon (Boundary) Cell
-
-    ---
-    <img src="https://github.com/user-attachments/assets/24107cfe-7f70-4a8e-926a-eea8055bd6e9" width="400">
+-	Source file: [DD_2D_HTL_Free_Carbon_Device_IONS_Newton_Example.py](DD_2D_HTL_Free_Carbon_Device_IONS_Newton_Example.py)
+<img src="https://github.com/user-attachments/assets/24107cfe-7f70-4a8e-926a-eea8055bd6e9" width="400">
+---
 
 </div>
 
