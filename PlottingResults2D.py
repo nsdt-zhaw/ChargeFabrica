@@ -6,7 +6,7 @@ from matplotlib.colors import Normalize
 from matplotlib.widgets import Slider
 from scipy.interpolate import interp1d
 
-Simulation_folder = "./Outputs/Drift_Diffusion_2D_IV_Simple_HTL_Free_Carbon_Device_IONS/VoltageSweep/"
+Simulation_folder = "./Outputs/DD_2D_HTL_Free_Carbon_Device_IONS_Newton_Example/VoltageSweep/"
 
 NumberOfSuns = 1.00
 
