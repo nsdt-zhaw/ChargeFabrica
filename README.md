@@ -30,6 +30,7 @@ ChargeFabrica uses [fipy](https://github.com/usnistgov/fipy) to solve the semico
 ---
 
 -  1D Simulation plots for EQE and SCE for NIP cells:
+-  Source files: [1D_NIP_EQE.py](1D_NIP_EQE.py) & [1D_NIP_SCE_Example.py](1D_NIP_SCE_Example.py)
   <img height="250" alt="image" src="https://github.com/user-attachments/assets/6e9a66e9-aa1e-49d2-8d65-5dbf7aff0128" />
   <img height="250" alt="image" src="https://github.com/user-attachments/assets/4594abeb-013a-4853-aa4d-bb2e6532e6bb" />
   
