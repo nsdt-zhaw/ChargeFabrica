@@ -53,7 +53,7 @@ The ChargeFabrica repo can then be cloned using the command:
 git clone https://github.com/nsdt-zhaw/ChargeFabrica.git
 ```
 ## QuickStart
-It is recommended to start with the script [Drift_Diffusion_1D_IV_IONS_NIP_Example.py](Drift_Diffusion_1D_IV_IONS_NIP_Example.py) by executing it.
+It is recommended to start with the script [DD_1D_IONS_NIP_Example.py](DD_1D_IONS_NIP_Example.py) by executing it.
 
 Once the simulation is completed, the results are saved as .npy files in the ./Outputs folder
 
