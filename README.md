@@ -24,7 +24,7 @@ ChargeFabrica uses [fipy](https://github.com/usnistgov/fipy) to solve the semico
 <div class="grid cards" markdown>
 
 -   1D Simulation plot for FTO (Boundary)|TiO2 (50 nm)|MAPbI3 (1600 nm)|Carbon (Boundary) Cell
--   Source file: [DD_1D_HTL_Free_Carbon_Device_IONS_Newton_Example.py](DD_1D_HTL_Free_Carbon_Device_IONS_Newton_Example.py)
+-   Source file: [1D_HTL_Free_Carbon_Device_IONS_Newton_Example.py](1D_HTL_Free_Carbon_Device_IONS_Newton_Example.py)
 <img src="https://github.com/user-attachments/assets/b30c3bcc-a48d-4661-9de1-8ffa65a27a80" width="400">
 
 ---
@@ -37,7 +37,7 @@ ChargeFabrica uses [fipy](https://github.com/usnistgov/fipy) to solve the semico
 ---
 
 -   2D Simulation plot for carbon-based triple mesoscopic HTL-free device: FTO (Boundary)|TiO2 (50 nm)|m-TiO2/MAPbI3 (150 nm)|m-ZrO2/MAPbI3 (1000 nm)|MAPbI3 (100 nm)|Carbon (Boundary) Cell
--	Source file: [DD_2D_HTL_Free_Carbon_Device_IONS_Newton_Example.py](DD_2D_HTL_Free_Carbon_Device_IONS_Newton_Example.py)
+-	Source file: [2D_HTL_Free_Carbon_Device_IONS_Newton_Example.py](2D_HTL_Free_Carbon_Device_IONS_Newton_Example.py)
 <img src="https://github.com/user-attachments/assets/24107cfe-7f70-4a8e-926a-eea8055bd6e9" width="400">
 
 ---
@@ -56,7 +56,7 @@ The ChargeFabrica repo can then be cloned using the command:
 git clone https://github.com/nsdt-zhaw/ChargeFabrica.git
 ```
 ## QuickStart
-It is recommended to start with the script [DD_1D_IONS_NIP_Example.py](DD_1D_IONS_NIP_Example.py) by executing it.
+It is recommended to start with the script [1D_IONS_NIP_Example.py](1D_IONS_NIP_Example.py) by executing it.
 
 Once the simulation is completed, the results are saved as .npy files in the ./Outputs folder
 
