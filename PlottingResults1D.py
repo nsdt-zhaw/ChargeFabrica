@@ -100,8 +100,6 @@ if len(applied_voltages) > 3:
     plt.show(block=False)
 
 PotentialMatrix = np.expand_dims(PotentialMatrix, axis=2)
-LUMO = PotentialMatrix + ChiMatrix
-HOMO = PotentialMatrix + ChiMatrix + EgMatrix
 
 titles = ['EField Strength (V/m)', 'Generation Rate (1/$\mathrm{m^3}$)', 'Potential (V)', 'Recombination (1/$\mathrm{m^3}$)', 'PLYield (-)']
 data_matrices = [EField_matrix, GenerationMatrix, PotentialMatrix, RecombinationMatrix, PLYield]
@@ -140,8 +138,8 @@ def update(val):
         axs[i].invert_xaxis()
 
     axs[-1].clear()
-    axs[-1].plot(LUMO[frame][:], "r")
-    axs[-1].plot(HOMO[frame][:], "b")
+    axs[-1].plot((PotentialMatrix + ChiMatrix)[frame][:], "r")
+    axs[-1].plot((PotentialMatrix + ChiMatrix + EgMatrix)[frame][:], "b")
     axs[-1].plot(psinvarmatrix[frame][:], "g")
     axs[-1].plot(psipvarmatrix[frame][:], color="purple")
     axs[-1].set_ylim(8, 0)

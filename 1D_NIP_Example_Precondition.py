@@ -179,16 +179,10 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
     Recombination_Combined = (Recombination_Bimolecular_EQ + Recombination_SRH_Bulk_EQ) #Include more recombination mechanisms by adding them to this line
 
-    LUMO = philocal + ChiCell
-    HOMO = philocal + ChiCell + EgCell
-
-    LUMO_a = philocal + ChiCell_a
-    LUMO_c = philocal + ChiCell_c
-
-    eqn = (0.00 == -TransientTerm(coeff=q, var=nlocal) + DiffusionTerm(coeff=q * D * nmob.harmonicFaceValue, var=nlocal) - ExponentialConvectionTerm(coeff=q * nmob.harmonicFaceValue * (LUMO + D*LogNcCell).faceGrad, var=nlocal) + q*gen_rate - q*Recombination_Combined)
-    eqp = (0.00 == -TransientTerm(coeff=q, var=plocal) + DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=plocal) + ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * (HOMO - D*LogNvCell).faceGrad, var=plocal) + q*gen_rate - q*Recombination_Combined)
-    eqa = (0.00 == -TransientTerm(coeff=q, var=alocal) + DiffusionTerm(coeff=q * D * anionmob.harmonicFaceValue, var=alocal) - ExponentialConvectionTerm(coeff=q * anionmob.harmonicFaceValue * LUMO_a.faceGrad, var=alocal))
-    eqc = (0.00 == -TransientTerm(coeff=q, var=clocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=clocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * LUMO_c.faceGrad, var=clocal))
+    eqn = (0.00 == -TransientTerm(coeff=q, var=nlocal) + DiffusionTerm(coeff=q * D * nmob.harmonicFaceValue, var=nlocal) - ExponentialConvectionTerm(coeff=q * nmob.harmonicFaceValue * (philocal.faceGrad + ChiCell.faceGrad + D * LogNcCell.faceGrad), var=nlocal) + q*gen_rate - q*Recombination_Combined)
+    eqp = (0.00 == -TransientTerm(coeff=q, var=plocal) + DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=plocal) + ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * (philocal.faceGrad + ChiCell.faceGrad + EgCell.faceGrad - D * LogNvCell.faceGrad), var=plocal) + q*gen_rate - q*Recombination_Combined)
+    eqa = (0.00 == -TransientTerm(coeff=q, var=alocal) + DiffusionTerm(coeff=q * D * anionmob.harmonicFaceValue, var=alocal) - ExponentialConvectionTerm(coeff=q * anionmob.harmonicFaceValue * (philocal.faceGrad + ChiCell_a.faceGrad), var=alocal))
+    eqc = (0.00 == -TransientTerm(coeff=q, var=clocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=clocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * (philocal.faceGrad + ChiCell_c.faceGrad), var=clocal))
     eqpoisson = (0.00 == -TransientTerm(var=philocal) + DiffusionTerm(coeff=epsilon, var=philocal) + (q/epsilon_0) * (plocal - nlocal + clocal - alocal + NdCell - NaCell))
 
     dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_timesteps = 1e-9, 1e-6, 1e-10, 0.05, 1, 2000
@@ -237,8 +231,8 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
         SweepCounter += 1
 
     # Here the electron and hole quasi-fermi levels are calculated
-    psinvar = LUMO - D * (numerix.log(nlocal) - LogNcCell)
-    psipvar = HOMO + D * (numerix.log(plocal) - LogNvCell)
+    psinvar = philocal + ChiCell - D * (numerix.log(nlocal) - LogNcCell)
+    psipvar = philocal + ChiCell + EgCell + D * (numerix.log(plocal) - LogNvCell)
 
     # Here the electric field is calculated
     E = -philocal.grad.globalValue
