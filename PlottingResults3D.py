@@ -47,7 +47,7 @@ plt.title("Mean JTotal_Y at V=0, z=0")
 plt.show()
 
 #For JV analysis (initially at z=0)
-JTotal_Y_mean = np.mean(JTotal_Y[:, 200:400, :, 0], axis=(1, 2))
+JTotal_Y_mean = np.mean(JTotal_Y[:, :, :, 0], axis=(1, 2))
 VocLocation = np.unravel_index(np.argmin(np.abs(JTotal_Y_mean)), JTotal_Y_mean.shape)
 
 #PL yield

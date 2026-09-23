@@ -16,10 +16,10 @@ JTotal_Y = (Jn_Matrix + Jp_Matrix)
 JTotal_Y_default = JTotal_Y[0]
 JTotal_Y_SCE = JTotal_Y[1:]
 
-JTotal_Y_mean_default = np.median(JTotal_Y[:,100:-100,:], axis=(1, 2))
+JTotal_Y_mean_default = np.median(JTotal_Y, axis=(1, 2))
 JTotal_Y_mean_default_Jsc = JTotal_Y_mean_default[0]
 
-JTotal_Y_mean_SCE = np.median(JTotal_Y_SCE[:,100:-100,:], axis=(1, 2))
+JTotal_Y_mean_SCE = np.median(JTotal_Y_SCE, axis=(1, 2))
 
 DeltaJsc = JTotal_Y_mean_SCE - JTotal_Y_mean_default_Jsc #Should be negative due to extra generation in SCE
 

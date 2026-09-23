@@ -54,7 +54,7 @@ AnionDensityMatrix = results["AnionDensityMatrix"][:]
 CationDensityMatrix = results["CationDensityMatrix"][:]
 
 # Initial calculations
-JTotal_Y_mean = np.median(JTotal_Y[:,100:-100,:], axis=(1, 2))
+JTotal_Y_mean = np.mean(JTotal_Y, axis=(1, 2))
 
 titles = ['EField_matrix', 'PMatrix', 'Generation Rate', 'JTotal_Y', 'PotentialMatrix', 'NMatrix', 'RecombinationMatrix', "Joule Heating", "Anion Density", "Cation Density"]
 print("JTotal_Y_mean shape: ", JTotal_Y_mean.shape)

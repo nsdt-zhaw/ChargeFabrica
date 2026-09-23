@@ -17,7 +17,7 @@ PhotonFluxArrayOriginalSplit = np.load(Simulation_folder + "PhotonFluxArrayOrigi
 PhotonFluxPerturbation = PhotonFluxMatrix - PhotonFluxArrayOriginal
 applied_wavelengths = np.load(Simulation_folder + "applied_wavelengths.npy")
 
-JTotal_Y_mean = -np.mean(JTotal_Y[:,20:80,:], axis=(1, 2))
+JTotal_Y_mean = -np.mean(JTotal_Y, axis=(1, 2))
 Jsc1Sun = JTotal_Y_mean[0]
 
 print("Jsc1Sun: ", Jsc1Sun, "A/m^2")

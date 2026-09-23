@@ -34,7 +34,7 @@ Jn_Matrix = results["ConservativeJnInternal"]
 Jp_Matrix = results["ConservativeJpInternal"]
 JTotal_Y = (Jn_Matrix + Jp_Matrix)
 
-JTotal_Y_mean = np.mean(JTotal_Y[:,20:80,:], axis=(1, 2))
+JTotal_Y_mean = np.mean(JTotal_Y, axis=(1, 2))
 VocLocation = np.unravel_index(np.argmin(np.abs(JTotal_Y_mean)), JTotal_Y_mean.shape)
 
 PLYield = 100*RadiativeRecombinationMatrix / (GenerationMatrix+1)
