@@ -1,4 +1,5 @@
 import numpy as np
+from workflow_utils import load_results
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -8,6 +9,7 @@ from scipy.interpolate import interp1d
 import copy
 
 Simulation_folder = "./Outputs/3D_HTL_Free_Carbon_Device_IONS/VoltageSweep/"
+results = load_results(Simulation_folder)
 NumberOfSuns = 1.00
 
 class PercentileNormalizer(Normalize):
@@ -23,16 +25,16 @@ def autoscale_None(self, A):
         self.vmax = np.percentile(A, self.upper_percentile)
 
 #Load full 4D scalar fields (voltage, y, x, z)
-GenerationMatrix = np.load(Simulation_folder + "GenValues_Matrix.npy")        # (V, Y, X, Z)
-RecombinationMatrix = np.load(Simulation_folder + "RecombinationMatrix.npy")  # (V, Y, X, Z)
-RadiativeRecombinationMatrix = np.load(Simulation_folder + "Recombination_Bimolecular_EQMatrix.npy")  # (V, Y, X, Z)
-PMatrix = np.load(Simulation_folder + "PMatrix.npy")                          # (V, Y, X, Z)
-NMatrix = np.load(Simulation_folder + "NMatrix.npy")                          # (V, Y, X, Z)
+GenerationMatrix = results["GenValues_Matrix"]        # (V, Y, X, Z)
+RecombinationMatrix = results["RecombinationMatrix"]  # (V, Y, X, Z)
+RadiativeRecombinationMatrix = results["Recombination_Bimolecular_EQMatrix"]  # (V, Y, X, Z)
+PMatrix = results["PMatrix"]                          # (V, Y, X, Z)
+NMatrix = results["NMatrix"]                          # (V, Y, X, Z)
 NMatrixShapeFull = NMatrix.shape                                              # (V, Y, X, Z)
 
 # Load conservative currents on internal faces (voltage, y-face, x, z).
-Jn_Matrix = np.load(Simulation_folder + "ConservativeJnInternal.npy")
-Jp_Matrix = np.load(Simulation_folder + "ConservativeJpInternal.npy")
+Jn_Matrix = results["ConservativeJnInternal"]
+Jp_Matrix = results["ConservativeJpInternal"]
 
 #Total y-component
 JTotal_Y = (Jn_Matrix + Jp_Matrix)  # (V, Y, X, Z)
@@ -52,22 +54,22 @@ VocLocation = np.unravel_index(np.argmin(np.abs(JTotal_Y_mean)), JTotal_Y_mean.s
 PLYield = 100 * RadiativeRecombinationMatrix / (GenerationMatrix + 1)
 
 #More fields (full 4D)
-PotentialMatrix = np.load(Simulation_folder + "PotentialMatrix.npy")  # (V, Y, X, Z)
-EField_matrix = -np.load(Simulation_folder + "Efield_matrix.npy")[:, 2, :, :, :]  # y-component, keep Z
-psinvarmatrix = np.load(Simulation_folder + "psinvarmatrix.npy")
-psipvarmatrix = np.load(Simulation_folder + "psipvarmatrix.npy")
-ChiMatrix = np.load(Simulation_folder + "ChiMatrix.npy")
-EgMatrix = np.load(Simulation_folder + "EgMatrix.npy")
+PotentialMatrix = results["PotentialMatrix"]  # (V, Y, X, Z)
+EField_matrix = -results["Efield_matrix"][:, 2, :, :, :]  # y-component, keep Z
+psinvarmatrix = results["psinvarmatrix"]
+psipvarmatrix = results["psipvarmatrix"]
+ChiMatrix = results["ChiMatrix"]
+EgMatrix = results["EgMatrix"]
 
 #Ions (reshape to match (V, Y, X, Z))
-AnionDensityMatrix = np.load(Simulation_folder + "AnionDensityMatrix.npy")
-CationDensityMatrix = np.load(Simulation_folder + "CationDensityMatrix.npy")
+AnionDensityMatrix = results["AnionDensityMatrix"]
+CationDensityMatrix = results["CationDensityMatrix"]
 AnionDensityMatrix = AnionDensityMatrix.reshape((AnionDensityMatrix.shape[0], NMatrixShapeFull[1], NMatrixShapeFull[2], NMatrixShapeFull[3]))
 CationDensityMatrix = CationDensityMatrix.reshape((CationDensityMatrix.shape[0], NMatrixShapeFull[1], NMatrixShapeFull[2], NMatrixShapeFull[3]))
 
-ResidualMatrix = np.load(Simulation_folder + "ResidualMatrix.npy")
-SweepCounterMatrix = np.load(Simulation_folder + "SweepCounterMatrix.npy")
-applied_voltages = np.load(Simulation_folder + "applied_voltages.npy")
+ResidualMatrix = results["ResidualMatrix"]
+SweepCounterMatrix = results["SweepCounterMatrix"]
+applied_voltages = results["applied_voltages"]
 
 my_cmap = copy.copy(plt.cm.get_cmap('hot'))
 my_cmap.set_bad((0, 0, 0))
@@ -113,16 +115,15 @@ fig.subplots_adjust(left=0.12, right=0.88, top=0.93, bottom=0.17, wspace=0.2, hs
 
 #Sliders
 slider_ax = plt.axes([0.2, 0.08, 0.6, 0.025])
-slider = Slider(ax=slider_ax, label='Voltage [V]', valmin=applied_voltages.min(), valmax=applied_voltages.max(), valinit=applied_voltages[0])
+slider = Slider(ax=slider_ax, label='Voltage [V]', valmin=applied_voltages.min(), valmax=max(applied_voltages.max(), applied_voltages.min() + 1e-12), valinit=applied_voltages[0])
 
 slider_z_ax = plt.axes([0.2, 0.03, 0.6, 0.025])
 slider_z = Slider(ax=slider_z_ax, label='z index', valmin=0, valmax=NZ - 1, valinit=z0, valstep=1)
 
 #Interpolate voltage to array index
-interp_indices = interp1d(applied_voltages, np.arange(len(applied_voltages)), bounds_error=False, fill_value="extrapolate")
 
 #Optional: plot IV curve in a separate figure for the initial z-slice
-if len(applied_voltages) > 3:
+if len(applied_voltages) > 3 and applied_voltages.min() <= 0 <= applied_voltages.max():
     f_interp = interp1d(applied_voltages, JTotal_Y_mean, kind='linear')
     voltage_fine = np.linspace(applied_voltages[0], applied_voltages[-1], 1000)
     JTotal_Y_fine = f_interp(voltage_fine)
@@ -163,7 +164,7 @@ if len(applied_voltages) > 3:
 
 def update(val):
     voltage = slider.val
-    frame = int(np.clip(np.round(interp_indices(voltage)), 0, len(applied_voltages) - 1))
+    frame = int(np.argmin(np.abs(applied_voltages - voltage)))
 
     z_idx = int(slider_z.val)
 

@@ -10,17 +10,16 @@ from calculate_absorption import calculate_absorption_above_bandgap
 from fipy import TransientTerm, DiffusionTerm, ExponentialConvectionTerm, ImplicitSourceTerm, ResidualTerm
 import fipy
 from fipy.tools import numerix
-import time
+from newton_solver import solve_newton
 from scipy.ndimage import zoom
 from SmoothingFunction import flatten_and_smooth_all
 from joblib import Parallel, delayed
 import multiprocessing
-import copy
 from material_maps import Semiconductors, Electrodes, map_semiconductor_property, map_electrode_property, map_props, name_to_code_SC, name_to_code_EL
 from BoundaryConditions import ohmic
 from constantsfile import TInfinite, q, epsilon_0, D
 from LoadSolarSpectrum import SolarSpectrumWavelength, SolarSpectrumIrradiance
-from workflow_utils import append_to_npy, run_sweep
+from workflow_utils import run_sweep, prepare_voltage_output, solve_and_save_voltage
 from electrical_numerics import as_cell_array, cell_variable, conservative_internal_face_currents, srh_rate_and_carrier_derivatives, terminal_current_densities
 
 Carbon_ID = name_to_code_EL["Carbon"]
@@ -129,8 +128,6 @@ niPS = np.sqrt(Nc * Nv * np.exp(-Eg / D))
 
 def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_values):
 
-    solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1, tolerance=1e-10) #Works out of the box with fipy installation
-
     state_names = ("electrostatic potential", "electron density", "hole density", "anion density", "cation density")
     state_values = (phi_values, n_values, p_values, a_values, c_values)
     philocal, nlocal, plocal, alocal, clocal = [cell_variable(mesh, name, value, True) for name, value in zip(state_names, state_values)]
@@ -180,54 +177,13 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     deqc = ((0.00 == -TransientTerm(coeff=q, var=dclocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=dclocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * (philocal.faceGrad + ChiCell_c.faceGrad), var=dclocal)) + ResidualTerm(equation=eqc, underRelaxation=underRelaxation))
     deqpoisson = ((0.00 == -TransientTerm(var=dphilocal) + DiffusionTerm(coeff=epsilon, var=dphilocal) + (q / epsilon_0) * (dplocal - dnlocal + dclocal - dalocal)) + ResidualTerm(equation=eqpoisson, underRelaxation=underRelaxation))
 
-    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_timesteps = 1.00e-7, 1.00e-5, 1e-10, 0.1, 1, 2000
-    residual, residual_old, dt_old, TotalTime, SweepCounter = 1., 1e10, dt, 0.0, 0
-    residualarray = np.zeros(max_timesteps)
-
-    while SweepCounter < max_timesteps and residual > desired_residual:
-
-        t0 = time.time()
-
-        EnableIons = True
-
-        for i in range(NumberofSweeps):
-            # Each outer sweep linearizes around the newly accepted state.
-            # Newton increments from the previous linearization must not enter
-            # the new off-diagonal Jacobian terms as explicit source values.
-            for correction in (dphilocal, dnlocal, dplocal, dalocal, dclocal):
-                correction.setValue(0.0)
-
-            deqpoisson.sweep(dt=dt, solver=solver)
-            philocal.setValue(DampingFactor * (philocal + dphilocal) + (1 - DampingFactor) * philocal.old)  # The potential should be damped BEFORE passing to the continuity equations!
-
-            residual = deqn.sweep(dt=dt, solver=solver) + deqp.sweep(dt=dt, solver=solver)
-            nlocal.setValue(DampingFactor * np.maximum(nlocal + dnlocal, 1.00e-30) + (1 - DampingFactor) * nlocal.old)
-            plocal.setValue(DampingFactor * np.maximum(plocal + dplocal, 1.00e-30) + (1 - DampingFactor) * plocal.old)
-
-            if EnableIons:
-                residual += deqa.sweep(dt=dt, solver=solver) + deqc.sweep(dt=dt, solver=solver)
-                alocal.setValue(DampingFactor * (alocal + dalocal) + (1 - DampingFactor) * alocal.old)
-                clocal.setValue(DampingFactor * (clocal + dclocal) + (1 - DampingFactor) * clocal.old)
-
-        residualarray[SweepCounter] = residual
-
-        PercentageImprovementPerSweep = (1 - (residual / residual_old) * dt_old / dt) * 100
-
-        if residual > residual_old * 1.2:
-            dt = max(1.00e-7, dt * 0.1)
-        else:
-            dt = min(MaxTimeStep, dt * 1.05)
-
-        dt_old, residual_old = dt, residual
-
-        # Update old
-        for v in (nlocal, plocal, alocal, clocal, philocal): v.updateOld()
-
-        TotalTime += dt
-
-        if SweepCounter == 0 or SweepCounter % 25 == 0 or residual <= desired_residual:
-            print("Sweep: ", SweepCounter, "TotalTime: ", TotalTime, "Residual: ", residual, "Time for sweep: ", time.time() - t0, "dt: ", dt, "Percentage Improvement: ", PercentageImprovementPerSweep, "Damping: ", DampingFactor)
-        SweepCounter += 1
+    # Physics and its linearization stay above; Newton iteration is shared.
+    residual, SweepCounter, residualarray = solve_newton(
+        fields=(philocal, nlocal, plocal, alocal, clocal),
+        equations=(deqpoisson, deqn, deqp, deqa, deqc),
+        corrections=(dphilocal, dnlocal, dplocal, dalocal, dclocal),
+        dt=1e-7, max_dt=1e-5, tolerance=1e-10,
+        damping=0.1, sweeps=1, max_steps=2000, enable_ions=True)
 
     # Here the electron and hole quasi-fermi levels are calculated
     psinvar = philocal + ChiCell - D * (numerix.log(nlocal) - LogNcCell)
@@ -243,9 +199,10 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
     (PotentialMatrix, GenValues_Matrix, RecombinationMatrix, Recombination_Bimolecular_EQMatrix, NMatrix, PMatrix, chiMatrix, EgMatrix, psinvarmatrix, psipvarmatrix) = [np.reshape(arr,(ny, nx)) for arr in (philocal, gen_rate, Recombination_Combined, Recombination_Bimolecular_EQ, nlocal, plocal, ChiCell, EgCell, psinvar, psipvar)]
 
-    return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue.copy(), "p": plocal.globalValue.copy(), "phi": philocal.globalValue.copy(), "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue.copy(), "CationDensityMatrix": clocal.globalValue.copy(), "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Converged": bool(residual <= desired_residual), "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix, "ResidualArray": residualarray, "ConservativeJnInternal": ConservativeJnInternal, "ConservativeJpInternal": ConservativeJpInternal, "TerminalCurrentDensity": TerminalCurrentDensity, "BottomTerminalCurrentDensity": BottomTerminalCurrentDensity, "TopTerminalCurrentDensity": TopTerminalCurrentDensity}
+    return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue.copy(), "p": plocal.globalValue.copy(), "phi": philocal.globalValue.copy(), "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue.copy(), "CationDensityMatrix": clocal.globalValue.copy(), "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix, "ResidualArray": residualarray, "ConservativeJnInternal": ConservativeJnInternal, "ConservativeJpInternal": ConservativeJpInternal, "TerminalCurrentDensity": TerminalCurrentDensity, "BottomTerminalCurrentDensity": BottomTerminalCurrentDensity, "TopTerminalCurrentDensity": TopTerminalCurrentDensity}
 
 def simulate_device(output_dir):
+    prepare_voltage_output(output_dir)
 
     applied_voltages = np.arange(0.0, 1.15, 0.05)
 
@@ -263,25 +220,14 @@ def simulate_device(output_dir):
         chunk_voltages = applied_voltages[start:start + chunk_size]
 
         # Parallel computation within the chunk
-        chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(delayed(solve_for_voltage)(voltage, n_values, p_values, a_values, c_values, phi_values) for voltage in chunk_voltages)
-
-        #DeepCopy To avoid overwriting the results in next loop
-        copied_result = [copy.deepcopy(r) for r in chunk_results]
-
-        # Save dictionary of chunk_results as .npy files named after the key
-        for result in copied_result:
-            for key, value in result.items():
-                append_to_npy(output_dir, key + ".npy", value)
-
-        #Save an array of all the voltages applied so far
-        np.save(os.path.join(output_dir, "applied_voltages.npy"), applied_voltages[:start + len(chunk_voltages)])
+        chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(delayed(solve_and_save_voltage)(solve_for_voltage, output_dir, start + offset, voltage, n_values, p_values, a_values, c_values, phi_values) for offset, voltage in enumerate(chunk_voltages))
 
         # Update initial conditions using results from the last voltage in the chunk to speed up convergence of the next chunk
         last_result = chunk_results[-1]  # The last result in the current chunk
         n_values, p_values = last_result["n"], last_result["p"]
         a_values, c_values = last_result["AnionDensityMatrix"], last_result["CationDensityMatrix"]
         phi_values = last_result["phi"]
-    return copied_result
+    return chunk_results
 
 def main_workflow():
     return run_sweep(simulate_device, __file__, "VoltageSweep", "Starting standard voltage sweep...", "Voltage sweep completed.")

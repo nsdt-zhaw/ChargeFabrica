@@ -1,4 +1,5 @@
 import numpy as np
+from workflow_utils import load_results
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -9,31 +10,32 @@ from plotting_utils import median_filter_1d
 
 # Load data
 Simulation_folder = "./Outputs/1D_IONS_NIP_Example/VoltageSweep/"
+results = load_results(Simulation_folder)
 NumberOfSuns = 1.00
 
-GenerationMatrix = np.load(Simulation_folder + "GenValues_Matrix.npy")[:]
-RecombinationMatrix = np.load(Simulation_folder + "RecombinationMatrix.npy")[:]
-PMatrix = np.load(Simulation_folder + "p.npy")[:]
-NMatrix = np.load(Simulation_folder + "n.npy")[:]
+GenerationMatrix = results["GenValues_Matrix"][:]
+RecombinationMatrix = results["RecombinationMatrix"][:]
+PMatrix = results["p"][:]
+NMatrix = results["n"][:]
 
-Jn_Matrix = np.load(Simulation_folder + "ConservativeJnInternal.npy")
-Jp_Matrix = np.load(Simulation_folder + "ConservativeJpInternal.npy")
+Jn_Matrix = results["ConservativeJnInternal"]
+Jp_Matrix = results["ConservativeJpInternal"]
 
 JTotal_Y = (Jn_Matrix + Jp_Matrix)
-PotentialMatrix = np.load(Simulation_folder + "phi.npy")[:]
-EField_matrix = -np.load(Simulation_folder + "Efield_matrix.npy")[:,1,:,:]
+PotentialMatrix = results["phi"][:]
+EField_matrix = -results["Efield_matrix"][:,1,:,:]
 
-applied_voltages = np.load(Simulation_folder + "applied_voltages.npy")[:]
+applied_voltages = results["applied_voltages"][:]
 print("applied_voltages ", applied_voltages)
-psinvarmatrix = np.load(Simulation_folder + "psinvarmatrix.npy")[:]
-psipvarmatrix = np.load(Simulation_folder + "psipvarmatrix.npy")[:]
-ChiMatrix = np.load(Simulation_folder + "ChiMatrix.npy")[:]
-EgMatrix = np.load(Simulation_folder + "EgMatrix.npy")[:]
-ResidualMatrix = np.load(Simulation_folder + "ResidualMatrix.npy")[:]
-ResidualArray = np.load(Simulation_folder + "residualarray.npy")[:]
-RadiativeRecombinationMatrix = np.load(Simulation_folder + "Recombination_Bimolecular_EQMatrix.npy")[:]
+psinvarmatrix = results["psinvarmatrix"][:]
+psipvarmatrix = results["psipvarmatrix"][:]
+ChiMatrix = results["ChiMatrix"][:]
+EgMatrix = results["EgMatrix"][:]
+ResidualMatrix = results["ResidualMatrix"][:]
+ResidualArray = results["ResidualArray"][:]
+RadiativeRecombinationMatrix = results["Recombination_Bimolecular_EQMatrix"][:]
 PLYield = 100*RadiativeRecombinationMatrix / (GenerationMatrix+1)
-SweepCounterMatrix = np.load(Simulation_folder + "SweepCounterMatrix.npy")[:]
+SweepCounterMatrix = results["SweepCounterMatrix"][:]
 
 #Create a plot where residualarray over time is shown for different applied voltages
 fig3, ax4 = plt.subplots()
@@ -48,8 +50,8 @@ plt.show(block=False)
 
 print("SweepCounterMatrix", SweepCounterMatrix)
 
-AnionDensityMatrix = np.load(Simulation_folder + "AnionDensityMatrix.npy")[:]
-CationDensityMatrix = np.load(Simulation_folder + "CationDensityMatrix.npy")[:]
+AnionDensityMatrix = results["AnionDensityMatrix"][:]
+CationDensityMatrix = results["CationDensityMatrix"][:]
 
 # Initial calculations
 JTotal_Y_mean = np.median(JTotal_Y[:,100:-100,:], axis=(1, 2))
@@ -58,7 +60,7 @@ titles = ['EField_matrix', 'PMatrix', 'Generation Rate', 'JTotal_Y', 'PotentialM
 print("JTotal_Y_mean shape: ", JTotal_Y_mean.shape)
 print("applied_voltages shape: ", applied_voltages.shape)
 
-if len(applied_voltages) > 3:
+if len(applied_voltages) > 3 and applied_voltages.min() <= 0 <= applied_voltages.max():
     # Interpolate JTotal_Y_mean over a larger set of voltages
     f_interp = interp1d(applied_voltages, JTotal_Y_mean, kind='linear')
     voltage_fine = np.linspace(applied_voltages[0], applied_voltages[-1], 1000)
@@ -121,13 +123,12 @@ for i, matrix in enumerate(data_matrices):
 
 fig.subplots_adjust(left=0.08, right=0.98, top=0.93, bottom=0.20, wspace=0.2, hspace=0.4)
 slider_ax = fig.add_axes([0.2, 0.05, 0.6, 0.03])
-slider = Slider(ax=slider_ax, label='Voltage [V]', valmin=applied_voltages.min(), valmax=applied_voltages.max(), valinit=applied_voltages[0])
-interp_indices = interp1d(applied_voltages, np.arange(len(applied_voltages)), bounds_error=False, fill_value="extrapolate")
+slider = Slider(ax=slider_ax, label='Voltage [V]', valmin=applied_voltages.min(), valmax=max(applied_voltages.max(), applied_voltages.min() + 1e-12), valinit=applied_voltages[0])
 
 def update(val):
     voltage = slider.val
     # find closest index for the given voltage
-    frame = int(np.clip(np.round(interp_indices(voltage)), 0, len(applied_voltages) - 1))
+    frame = int(np.argmin(np.abs(applied_voltages - voltage)))
     for i, matrix in enumerate(data_matrices):
         axs[i].clear()
         axs[i].plot(matrix[frame])

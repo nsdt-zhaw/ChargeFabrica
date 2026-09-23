@@ -9,7 +9,7 @@ from calculate_absorption import calculate_absorption_above_bandgap
 from fipy import TransientTerm, DiffusionTerm, ExponentialConvectionTerm, ImplicitSourceTerm, ResidualTerm
 import fipy
 from fipy.tools import numerix
-import time
+from newton_solver import solve_newton
 from scipy.ndimage import zoom
 from SmoothingFunction import flatten_and_smooth_all
 from joblib import Parallel, delayed
@@ -116,8 +116,6 @@ niPS = np.sqrt(Nc * Nv * np.exp(-Eg / D))
 
 def solve_for_wavelength(voltage, n_values, p_values, a_values, c_values, phi_values, GenRate_values_default):
 
-    solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1, tolerance=1e-10) #Works out of the box with simple fipy installation, but slower than pysparse
-
     state_names = ("electrostatic potential", "electron density", "hole density", "anion density", "cation density")
     state_values = (phi_values, n_values, p_values, a_values, c_values)
     philocal, nlocal, plocal, alocal, clocal = [cell_variable(mesh, name, value, True) for name, value in zip(state_names, state_values)]
@@ -172,54 +170,14 @@ def solve_for_wavelength(voltage, n_values, p_values, a_values, c_values, phi_va
     deqc = ((0.00 == -TransientTerm(coeff=q, var=dclocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=dclocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * (philocal.faceGrad + ChiCell_c.faceGrad), var=dclocal)) + ResidualTerm(equation=eqc, underRelaxation=underRelaxation))
     deqpoisson = ((0.00 == -TransientTerm(var=dphilocal) + DiffusionTerm(coeff=epsilon, var=dphilocal) + (q / epsilon_0) * (dplocal - dnlocal + dclocal - dalocal)) + ResidualTerm(equation=eqpoisson, underRelaxation=underRelaxation))
 
-    dt, MaxTimeStep, desired_residual, DampingFactor, NumberofSweeps, max_timesteps = 1e-7, 1e-6, 1e-10, 0.1, 1, 2000
-    residual, residual_old, dt_old, TotalTime, SweepCounter = 1., 1e10, dt, 0.0, 0
-    residualarray = np.zeros(max_timesteps)
-
-    while SweepCounter < max_timesteps and residual > desired_residual:
-
-        t0 = time.time()
-
-        for i in range(NumberofSweeps):
-            # Each outer sweep linearizes around the newly accepted state.
-            # Newton increments from the previous linearization must not enter
-            # the new off-diagonal Jacobian terms as explicit source values.
-            for correction in (dphilocal, dnlocal, dplocal, dalocal, dclocal):
-                correction.setValue(0.0)
-
-            deqpoisson.sweep(dt=dt, solver=solver)
-            philocal.setValue(DampingFactor * (philocal + dphilocal) + (1 - DampingFactor) * philocal.old) # The potential should be damped BEFORE passing to the continuity equations!
-
-            residual = deqn.sweep(dt=dt, solver=solver) + deqp.sweep(dt=dt, solver=solver)
-            nlocal.setValue(DampingFactor * np.maximum(nlocal + dnlocal, 1.00e-30) + (1 - DampingFactor) * nlocal.old)
-            plocal.setValue(DampingFactor * np.maximum(plocal + dplocal, 1.00e-30) + (1 - DampingFactor) * plocal.old)
-
-        EnableIons = True
-        if EnableIons:
-            #Here the ionic continuity equations are solved
-            residual += deqa.sweep(dt=dt/10, solver=solver) + deqc.sweep(dt=dt/10, solver=solver)
-            alocal.setValue(DampingFactor * (alocal + dalocal) + (1 - DampingFactor) * alocal.old)
-            clocal.setValue(DampingFactor * (clocal + dclocal) + (1 - DampingFactor) * clocal.old)
-
-        residualarray[SweepCounter] = residual
-
-        PercentageImprovementPerSweep = (1 - (residual / residual_old) * dt_old / dt) * 100
-
-        if residual > residual_old * 1.2:
-            dt = max(1e-7, dt * 0.1)
-        else:
-            dt = min(MaxTimeStep, dt * 1.05)
-
-        dt_old, residual_old = dt, residual
-
-        # Update old
-        for v in (nlocal, plocal, alocal, clocal, philocal): v.updateOld()
-
-        TotalTime = TotalTime + dt
-
-        if SweepCounter == 0 or SweepCounter % 25 == 0 or residual <= desired_residual:
-            print("Sweep: ", SweepCounter, "TotalTime: ", TotalTime, "Residual: ", residual, "Time for sweep: ", time.time() - t0, "dt: ", dt, "Percentage Improvement: ", PercentageImprovementPerSweep, "Damping: ", DampingFactor)
-        SweepCounter += 1
+    # Shared iteration; device physics and equations remain above.
+    # Relax ions once per step at the same dt, after the electronic sweeps.
+    residual, SweepCounter, residualarray = solve_newton(
+        fields=(philocal, nlocal, plocal, alocal, clocal),
+        equations=(deqpoisson, deqn, deqp, deqa, deqc),
+        corrections=(dphilocal, dnlocal, dplocal, dalocal, dclocal),
+        dt=1e-07, max_dt=1e-06, tolerance=1e-10,
+        damping=0.1, sweeps=1, max_steps=2000, enable_ions=True)
 
     # Here the electron and hole quasi-fermi levels are calculated
     psinvar = philocal + ChiCell - D * (numerix.log(nlocal) - LogNcCell)
@@ -234,7 +192,7 @@ def solve_for_wavelength(voltage, n_values, p_values, a_values, c_values, phi_va
     BottomTerminalCurrentDensity, TopTerminalCurrentDensity, TerminalCurrentDensity = terminal_current_densities(ConservativeJnInternal, ConservativeJpInternal)
     (PotentialMatrix, GenValues_Matrix, RecombinationMatrix, Recombination_Bimolecular_EQMatrix, NMatrix, PMatrix, chiMatrix, EgMatrix, psinvarmatrix, psipvarmatrix) = [np.reshape(arr,(ny, nx)) for arr in (philocal, gen_rate, Recombination_Combined, Recombination_Bimolecular_EQ, nlocal, plocal, ChiCell, EgCell, psinvar, psipvar)]
 
-    return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue.copy(), "p": plocal.globalValue.copy(), "phi": philocal.globalValue.copy(), "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue.copy(), "CationDensityMatrix": clocal.globalValue.copy(), "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Converged": bool(residual <= desired_residual), "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix, "ResidualArray": residualarray, "ConservativeJnInternal": ConservativeJnInternal, "ConservativeJpInternal": ConservativeJpInternal, "TerminalCurrentDensity": TerminalCurrentDensity, "BottomTerminalCurrentDensity": BottomTerminalCurrentDensity, "TopTerminalCurrentDensity": TopTerminalCurrentDensity}
+    return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue.copy(), "p": plocal.globalValue.copy(), "phi": philocal.globalValue.copy(), "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue.copy(), "CationDensityMatrix": clocal.globalValue.copy(), "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix, "ResidualArray": residualarray, "ConservativeJnInternal": ConservativeJnInternal, "ConservativeJpInternal": ConservativeJpInternal, "TerminalCurrentDensity": TerminalCurrentDensity, "BottomTerminalCurrentDensity": BottomTerminalCurrentDensity, "TopTerminalCurrentDensity": TopTerminalCurrentDensity}
 
 def simulate_device(output_dir):
 
