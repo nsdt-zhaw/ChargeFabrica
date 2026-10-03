@@ -213,20 +213,19 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     net_dR_dp = Recombination_Bimolecular_Cell * nlocal + SRH_Bulk_dR_dp + SRH_Interface_dR_dp
     recombination_correction = (ImplicitSourceTerm(coeff=q * net_dR_dn, var=dnlocal) + ImplicitSourceTerm(coeff=q * net_dR_dp, var=dplocal))
 
-    underRelaxation = 1.
+    deqn = ((0.00 == -TransientTerm(coeff=q, var=dnlocal) + DiffusionTerm(coeff=q * D * nmob.harmonicFaceValue, var=dnlocal) - ExponentialConvectionTerm( coeff=q * nmob.harmonicFaceValue * (philocal.faceGrad + ChiCell.faceGrad + D * LogNcCell.faceGrad), var=dnlocal) - recombination_correction) + ResidualTerm(equation=eqn))
+    deqp = ((0.00 == -TransientTerm(coeff=q, var=dplocal) + DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=dplocal) + ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * (philocal.faceGrad + ChiCell.faceGrad + EgCell.faceGrad - D * LogNvCell.faceGrad), var=dplocal) - recombination_correction) + ResidualTerm(equation=eqp))
+    deqa = ((0.00 == -TransientTerm(coeff=q, var=dalocal) + DiffusionTerm(coeff=q * D * anionmob.harmonicFaceValue, var=dalocal) - ExponentialConvectionTerm(coeff=q * anionmob.harmonicFaceValue * (philocal.faceGrad + ChiCell_a.faceGrad), var=dalocal)) + ResidualTerm(equation=eqa))
+    deqc = ((0.00 == -TransientTerm(coeff=q, var=dclocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=dclocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * (philocal.faceGrad + ChiCell_c.faceGrad), var=dclocal)) + ResidualTerm(equation=eqc))
+    deqpoisson = ((0.00 == -TransientTerm(var=dphilocal) + DiffusionTerm(coeff=epsilon, var=dphilocal) + (q / epsilon_0) * (dplocal - dnlocal + dclocal - dalocal)) + ResidualTerm(equation=eqpoisson))
 
-    deqn = ((0.00 == -TransientTerm(coeff=q, var=dnlocal) + DiffusionTerm(coeff=q * D * nmob.harmonicFaceValue, var=dnlocal) - ExponentialConvectionTerm( coeff=q * nmob.harmonicFaceValue * (philocal.faceGrad + ChiCell.faceGrad + D * LogNcCell.faceGrad), var=dnlocal) - recombination_correction) + ResidualTerm(equation=eqn, underRelaxation=underRelaxation))
-    deqp = ((0.00 == -TransientTerm(coeff=q, var=dplocal) + DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=dplocal) + ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * (philocal.faceGrad + ChiCell.faceGrad + EgCell.faceGrad - D * LogNvCell.faceGrad), var=dplocal) - recombination_correction) + ResidualTerm(equation=eqp, underRelaxation=underRelaxation))
-    deqa = ((0.00 == -TransientTerm(coeff=q, var=dalocal) + DiffusionTerm(coeff=q * D * anionmob.harmonicFaceValue, var=dalocal) - ExponentialConvectionTerm(coeff=q * anionmob.harmonicFaceValue * (philocal.faceGrad + ChiCell_a.faceGrad), var=dalocal)) + ResidualTerm(equation=eqa, underRelaxation=underRelaxation))
-    deqc = ((0.00 == -TransientTerm(coeff=q, var=dclocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=dclocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * (philocal.faceGrad + ChiCell_c.faceGrad), var=dclocal)) + ResidualTerm(equation=eqc, underRelaxation=underRelaxation))
-    deqpoisson = ((0.00 == -TransientTerm(var=dphilocal) + DiffusionTerm(coeff=epsilon, var=dphilocal) + (q / epsilon_0) * (dplocal - dnlocal + dclocal - dalocal)) + ResidualTerm(equation=eqpoisson, underRelaxation=underRelaxation))
-
+    desired_residual = 1e-10
     # Shared iteration; device physics and equations remain above.
     residual, SweepCounter, residualarray = solve_newton(
         fields=(philocal, nlocal, plocal, alocal, clocal),
         equations=(deqpoisson, deqn, deqp, deqa, deqc),
         corrections=(dphilocal, dnlocal, dplocal, dalocal, dclocal),
-        dt=1e-07, max_dt=1e-05, tolerance=1e-10,
+        dt=1e-07, max_dt=1e-05, tolerance=desired_residual,
         damping=0.1, sweeps=1, max_steps=2000, enable_ions=True)
 
     # Here the electron and hole quasi-fermi levels are calculated
@@ -243,7 +242,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
     (PotentialMatrix, GenValues_Matrix, RecombinationMatrix, Recombination_Bimolecular_EQMatrix, NMatrix, PMatrix, chiMatrix, EgMatrix, psinvarmatrix, psipvarmatrix) = [np.reshape(arr,(ny, nx)) for arr in (philocal, gen_rate, Recombination_Combined, Recombination_Bimolecular_EQ, nlocal, plocal, ChiCell, EgCell, psinvar, psipvar)]
 
-    return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue.copy(), "p": plocal.globalValue.copy(), "phi": philocal.globalValue.copy(), "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue.copy(), "CationDensityMatrix": clocal.globalValue.copy(), "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix, "ResidualArray": residualarray, "ConservativeJnInternal": ConservativeJnInternal, "ConservativeJpInternal": ConservativeJpInternal, "TerminalCurrentDensity": TerminalCurrentDensity, "BottomTerminalCurrentDensity": BottomTerminalCurrentDensity, "TopTerminalCurrentDensity": TopTerminalCurrentDensity}
+    return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue.copy(), "p": plocal.globalValue.copy(), "phi": philocal.globalValue.copy(), "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue.copy(), "CationDensityMatrix": clocal.globalValue.copy(), "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix, "ResidualArray": residualarray, "ConservativeJnInternal": ConservativeJnInternal, "ConservativeJpInternal": ConservativeJpInternal, "TerminalCurrentDensity": TerminalCurrentDensity, "BottomTerminalCurrentDensity": BottomTerminalCurrentDensity, "TopTerminalCurrentDensity": TopTerminalCurrentDensity, "Converged": bool(residual <= desired_residual)}
 
 def simulate_device(output_dir):
     prepare_voltage_output(output_dir)
