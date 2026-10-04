@@ -140,5 +140,356 @@ ChargeFabrica has been published as:
 ## Publications using ChargeFabrica
 Ji, F., Sachsenweger Ballantyne, T., Meraji, K. et al. Simultaneous optimization of film morphology and structure dimensionality in Cs3Sb2I9 through butylamine gas treatment. Commun Mater (2026). https://doi.org/10.1038/s43246-026-01240-8
 
+## 1. Physical unknowns and conventions
 
+At each applied voltage, the solver seeks stationary fields
 
+$$
+\mathbf u=(\phi,n,p,a,c)^T.
+$$
+
+Here $\phi$ is the electrostatic potential, $n$ and $p$ are electron and hole
+densities, and $a$ and $c$ are singly negative and positive ionic densities.
+Redistribution of these charges changes the potential; the potential changes
+transport, which feeds back into the charge distribution.
+
+| Symbol | Meaning and units | Code |
+| --- | --- | --- |
+| $\phi$ | Electrostatic potential, V | `philocal` |
+| $n,p,a,c$ | Particle densities, m⁻³ | `nlocal`, `plocal`, `alocal`, `clocal` |
+| $q$ | Positive elementary charge, C | `q` in `constantsfile.py` |
+| $\epsilon_r$ | Relative permittivity | `epsilon` |
+| $\epsilon_0$ | Vacuum permittivity, F/m | `epsilon_0` |
+| $\mu_s$ | Species mobility, m²/(V s) | `nmob`, `pmob`, `anionmob`, `cationmob` |
+| $V_T=k_BT/q$ | Thermal voltage, V | **`D`** in `constantsfile.py` |
+| $N_c,N_v$ | Conduction/valence densities of states, m⁻³ | `Nc`, `Nv`, `LogNcCell`, `LogNvCell` |
+| $\chi,E_g$ | Band parameters in the code's numerical eV/V convention | `ChiCell`, `EgCell` |
+| $G,R$ | Pair generation/net recombination, m⁻³ s⁻¹ | `gen_rate`, `Recombination_Combined` |
+
+The code variable **`D` is the thermal voltage**, not a diffusion coefficient.
+The Einstein relation gives $\mathcal D_s=\mu_sV_T$. FiPy continuity equations
+are charge-weighted, so their diffusion coefficients also contain $q$.
+
+The model is isothermal and uses nondegenerate semiconductor statistics.
+Material maps supply band parameters, doping, permittivity, mobilities and
+recombination parameters. `flatten_and_smooth_all()` smooths selected maps
+before equation assembly; its settings affect the represented interfaces.
+
+## 2. Stationary equations and their implementation
+
+### Poisson equation
+
+The charge density and electric field are
+
+$$
+\rho=q(p-n+c-a+N_D-N_A),\qquad \mathbf E=-\nabla\phi.
+$$
+
+Using relative permittivity, Poisson's equation is
+
+$$
+\nabla\cdot(\epsilon_r\nabla\phi)
++\frac{q}{\epsilon_0}(p-n+c-a+N_D-N_A)=0.
+$$
+
+`eqpoisson` implements this charge sum using `plocal`, `nlocal`, `clocal`,
+`alocal`, `NdCell` and `NaCell`. Electrons and anions contribute negative
+charge; holes and cations contribute positive charge. Its `TransientTerm`
+is an artificial relaxation term, discussed in Section 5; it vanishes in
+the stationary physical target.
+
+### Electronic transport
+
+Define the effective transport potentials
+
+$$
+U_n=\phi+\chi+V_T\ln N_c,\qquad
+U_p=\phi+\chi+E_g-V_T\ln N_v.
+$$
+
+Only gradients of these logarithms enter transport; a fixed density reference
+is implicit when taking logarithms of dimensional densities of states.
+Including the band and density-of-states gradients matters at material
+interfaces.
+
+Using **conventional charge-current** signs,
+
+$$
+\mathbf J_n=q\mu_n(V_T\nabla n-n\nabla U_n),\qquad
+\mathbf J_p=-q\mu_p(V_T\nabla p+p\nabla U_p).
+$$
+
+The stationary electronic continuity equations are
+
+$$
+0=\nabla\cdot\mathbf J_n+q(G-R),\qquad
+0=-\nabla\cdot\mathbf J_p+q(G-R).
+$$
+
+`eqn` and `eqp` contain these terms plus pseudo-time storage. For example,
+the electron equation is assembled as
+
+```python
+eqn = (
+    TransientTerm(coeff=q, var=nlocal)
+    == DiffusionTerm(coeff=q * D * nmob.harmonicFaceValue, var=nlocal)
+    - ExponentialConvectionTerm(
+        coeff=q * nmob.harmonicFaceValue
+              * (philocal.faceGrad + ChiCell.faceGrad + D * LogNcCell.faceGrad),
+        var=nlocal)
+    + q * gen_rate - q * Recombination_Combined
+)
+```
+
+The hole equation uses the opposite convection sign and includes
+`EgCell.faceGrad - D * LogNvCell.faceGrad`. Electron particle flux is
+$-\mathbf J_n/q$, whereas hole particle flux is $\mathbf J_p/q$.
+
+### Ionic transport and inventory
+
+For the negative and positive ionic species, define
+
+$$
+U_a=\phi+\chi_a,\qquad U_c=\phi+\chi_c.
+$$
+
+In this code convention their particle fluxes are
+
+$$
+\mathbf N_a=-\mu_aV_T\nabla a+\mu_a a\nabla U_a,\qquad
+\mathbf N_c=-\mu_cV_T\nabla c-\mu_c c\nabla U_c.
+$$
+
+There are no ionic reaction sources in this example. The stationary equations
+are $\nabla\cdot\mathbf N_a=0$ and $\nabla\cdot\mathbf N_c=0$:
+
+$$
+0=\nabla\cdot(q\mu_aV_T\nabla a)
+-\nabla\cdot(q\mu_a a\nabla U_a),
+$$
+
+$$
+0=\nabla\cdot(q\mu_cV_T\nabla c)
++\nabla\cdot(q\mu_c c\nabla U_c).
+$$
+
+These are `eqa` and `eqc`. `ChiCell_a` and `ChiCell_c` allow species-specific
+energy gradients. Their charge currents are $\mathbf J_a=-q\mathbf N_a$ and
+$\mathbf J_c=q\mathbf N_c$.
+
+Natural no-flux boundaries block ionic exchange with the exterior. Zero face
+mobility can also isolate regions. Each connected blocking region has a
+conserved inventory:
+
+$$
+I_a=\int_{\Omega_a}a\,dV,\qquad I_c=\int_{\Omega_c}c\,dV.
+$$
+
+The initial ionic levels select these inventories. Pseudo-time continuation
+retains them rather than solving an unconstrained, singular stationary ion
+system from scratch. Different disconnected regions require their own
+inventories. Conservation should be checked when changing boundaries or maps.
+
+### Optical generation and recombination
+
+The example calculates optical generation from its absorption spectrum and
+solar illumination using `calculate_absorption_above_bandgap()`. The resulting
+spatial generation profile is supplied through `gen_rate`.
+
+The implemented recombination sum is
+
+$$
+R=R_{\mathrm{rad}}+R_{\mathrm{SRH,bulk}}+R_{\mathrm{SRH,interface}},\qquad
+R_{\mathrm{rad}}=B(np-n_i^2),
+$$
+
+$$
+n_i^2=N_cN_v\exp(-E_g/V_T).
+$$
+
+For each SRH contribution, including its spatial activation factor $Z$,
+
+$$
+R_{\mathrm{SRH}}=Z\frac{np-n_i^2}{H},\qquad
+H=\tau_p(n+n_1)+\tau_n(p+p_1).
+$$
+
+`n_hat`, `p_hat`, `n_hat_mixed` and `p_hat_mixed` specify the bulk and
+interfacial trap populations. The interfacial term is represented in a marked
+cell region, not as a separate boundary equation.
+
+The exact fixed-temperature derivatives are
+
+$$
+\frac{\partial R_{\mathrm{SRH}}}{\partial n}
+=Z\frac{pH-\tau_p(np-n_i^2)}{H^2},\qquad
+\frac{\partial R_{\mathrm{SRH}}}{\partial p}
+=Z\frac{nH-\tau_n(np-n_i^2)}{H^2}.
+$$
+
+`srh_rate_and_carrier_derivatives()` in
+[electrical_numerics.py](electrical_numerics.py) supplies these expressions.
+`net_dR_dn` and `net_dR_dp` add the radiative derivatives $Bp$ and $Bn$ and
+both enabled SRH contributions.
+
+Inspect `Recombination_Combined` to identify the mechanisms actually used.
+For example, the script defines a Langevin rate, but it is not included in
+the current recombination sum.
+
+### Ohmic contacts
+
+[BoundaryConditions.py](BoundaryConditions.py), function `ohmic()`, calculates
+contact carrier densities from the adjacent semiconductor and metal work
+function $W$:
+
+$$
+n_{\mathrm{contact}}=N_c\exp[(\chi-W)/V_T],\qquad
+p_{\mathrm{contact}}=N_v\exp[(W-\chi-E_g)/V_T].
+$$
+
+`contact_bcs` fixes the top potential to zero and the bottom potential to
+$-(V_{\mathrm{bi}}-V_{\mathrm{app}})$. The electronic densities are constrained
+at both contacts. The corresponding Newton corrections are zero there because
+the boundary values are fixed during each voltage-point solve.
+
+## 3. The fully coupled Newton iteration
+
+### Residual and linear system
+
+The discretized equations form a nonlinear residual vector
+
+$$
+\mathbf F(\mathbf u)=0.
+$$
+
+At Newton iteration $m$, solve
+
+$$
+\mathbf J(\mathbf u^{(m)})\delta\mathbf u=-\mathbf F(\mathbf u^{(m)}),
+\qquad \mathbf J=\frac{\partial\mathbf F}{\partial\mathbf u}.
+$$
+
+Then update the fields with the accepted correction and damping factor.
+There are five unknowns per cell, so $N$ cells give a $5N\times5N$ system.
+The correction order is
+`(dphilocal, dnlocal, dplocal, dalocal, dclocal)`.
+
+The Jacobian has the structure
+
+$$
+\begin{pmatrix}
+J_{\phi\phi}&J_{\phi n}&J_{\phi p}&J_{\phi a}&J_{\phi c}\\
+J_{n\phi}&J_{nn}&J_{np}&0&0\\
+J_{p\phi}&J_{pn}&J_{pp}&0&0\\
+J_{a\phi}&0&0&J_{aa}&0\\
+J_{c\phi}&0&0&0&J_{cc}
+\end{pmatrix}.
+$$
+
+| Block | Meaning | Code |
+| --- | --- | --- |
+| $J_{\phi\phi}$ | Dielectric Laplacian and potential pseudo-time regularization | `deqpoisson` |
+| $J_{\phi s}$ | Signed charge response to each density increment | `CoupledChargeTerm` in `deqpoisson` |
+| $J_{nn},J_{pp}$ | Storage, fixed-potential transport and self-recombination derivative | `deqn`, `deqp`, `recombination_correction()` |
+| $J_{np},J_{pn}$ | Cross-carrier recombination derivatives | `net_dR_dp`, `net_dR_dn` |
+| $J_{s\phi}$ | Potential derivative of the fitted transport flux | `responses`, `update_transport_response()` and potential diffusion blocks |
+| $J_{aa},J_{cc}$ | Ionic storage and fixed-potential transport | `deqa`, `deqc` |
+
+### Poisson charge blocks
+
+For the Poisson residual written in Section 2, the variation is
+
+$$
+\delta F_\phi=\nabla\cdot(\epsilon_r\nabla\delta\phi)
++\frac{q}{\epsilon_0}(\delta p-\delta n+\delta c-\delta a).
+$$
+
+The device adds these charge blocks explicitly:
+
+```python
+deqpoisson += sum(
+    CoupledChargeTerm(coeff=sign*q/epsilon_0, var=delta)
+    for sign, delta in (
+        (1, dplocal), (-1, dnlocal), (1, dclocal), (-1, dalocal)
+    )
+)
+```
+
+`CoupledChargeTerm` retains either sign in the implicit matrix. Ordinary
+source-term sign splitting can otherwise move an intended cross derivative
+to the explicit side.
+
+### Recombination and potential–transport blocks
+
+Both carrier rows include
+
+$$
+q\,\delta R=qR_n\delta n+qR_p\delta p.
+$$
+
+`recombination_correction()` creates fresh FiPy source terms for each row.
+The potential–transport blocks differentiate the fitted drift flux, rather
+than substituting an equilibrium density response. For example:
+
+```python
+deqn += DiffusionTerm(
+    coeff=q * nmob.harmonicFaceValue * responses[0], var=dphilocal)
+deqp -= DiffusionTerm(
+    coeff=q * pmob.harmonicFaceValue * responses[1], var=dphilocal)
+```
+
+`update_transport_response()` refreshes all four face response fields before
+assembly. The anion and cation potential blocks have the corresponding opposite
+signs and mask exterior faces to preserve blocking boundaries.
+
+### FiPy assembly and solve
+
+`solve_for_voltage()` supplies all five correction equations, all five physical
+equations and the response callback to `solve_newton_coupled()`.
+The common `_solve_coupled()` engine assembles them through FiPy:
+
+```python
+block = equations[0]
+for equation in equations[1:]:
+    block = block & equation
+block(corrections)  # Fix the unknown ordering explicitly.
+block.sweep(dt=dt, solver=linear_solver, cacheResidual=True)
+```
+
+FiPy's `&` combines the supplied blocks; it does not generate missing nonlinear
+derivatives. Its public ordering API fixes the correction order. See
+[FiPy's coupled-equation documentation](https://pages.nist.gov/fipy/en/latest/USAGE.html).
+The shared default uses FiPy's SciPy `LinearLUSolver`.
+
+`ResidualTerm(equation=...)` supplies the current physical residual to each
+linear correction equation. Depending on which side of `==` a term appears,
+FiPy can use an overall row sign; residual and derivative conventions must
+remain consistent.
+
+Coupling resolves potential, transport, recombination and charge feedback in
+one linear solve. A sequential iteration delays parts of this feedback until
+later field updates.
+
+## 4. Pseudo-time, damping and convergence
+
+### Numerical relaxation toward a stationary state
+
+`TransientTerm` in this steady solver represents **pseudo-time** $\tau$.
+For example, the potential relaxation is written as
+
+$$
+-\frac{\partial\phi}{\partial\tau}
++\nabla\cdot(\epsilon_r\nabla\phi)+\rho/\epsilon_0=0.
+$$
+
+It regularizes the iteration and disappears at the stationary solution.
+Pseudo-time is a numerical parameter, not an experimental time scale. The
+potential storage term is artificial and has no physical capacitance meaning.
+A backward-Euler relaxation step contributes storage proportional to
+$(u-u_{\mathrm{old}})/\Delta\tau$; `TransientTerm(coeff=q)` applies the
+charge factor for the carrier and ionic equations.
+
+`solve_newton_coupled()` uses the current `dt`, `min_dt` and `max_dt` to
+control relaxation. The shared engine decreases `dt` after sufficiently worse
+residuals, otherwise increases it up to `max_dt`, and advances `.old` after
+each update. This retains the established steady continuation policy.
