@@ -1,4 +1,6 @@
 import numpy as np
+import os
+from workflow_utils import load_results
 import matplotlib.pyplot as plt
 
 # Requires a completed EQE simulation folder
@@ -7,15 +9,21 @@ Simulation_folder = "./Outputs/1D_NIP_EQE/WavelengthSweep/"
 NumberOfSuns = 1.00
 ScalingFactor = 1.00
 
-# Load matrices as before
-Jn_Y = np.load(Simulation_folder + "ConservativeJnInternal.npy")
-Jp_Y = np.load(Simulation_folder + "ConservativeJpInternal.npy")
+# Load one ordered snapshot, including legacy per-field files.
+results = load_results(Simulation_folder)
+if results['applied_wavelengths'][0] != 0.:
+    raise ValueError('The baseline EQE point has not completed yet.')
+Jn_Y = results["ConservativeJnInternal"]
+Jp_Y = results["ConservativeJpInternal"]
 JTotal_Y = Jn_Y + Jp_Y
-PhotonFluxMatrix = np.load(Simulation_folder + "PhotonFluxArrayFinal.npy")
-PhotonFluxArrayOriginal = np.load(Simulation_folder + "PhotonFluxArrayOriginal.npy")
-PhotonFluxArrayOriginalSplit = np.load(Simulation_folder + "PhotonFluxArrayOriginalSplit.npy")
+PhotonFluxMatrix = results["PhotonFluxArrayFinal"]
+PhotonFluxArrayOriginal = results["PhotonFluxArrayOriginal"]
+PhotonFluxArrayOriginalSplit = results["PhotonFluxArrayOriginalSplit"]
+if os.path.isdir(os.path.join(Simulation_folder, "points")):
+    PhotonFluxArrayOriginal = PhotonFluxArrayOriginal[:1]
+    PhotonFluxArrayOriginalSplit = PhotonFluxArrayOriginalSplit[1:]
 PhotonFluxPerturbation = PhotonFluxMatrix - PhotonFluxArrayOriginal
-applied_wavelengths = np.load(Simulation_folder + "applied_wavelengths.npy")
+applied_wavelengths = results["applied_wavelengths"]
 
 JTotal_Y_mean = -np.mean(JTotal_Y, axis=(1, 2))
 Jsc1Sun = JTotal_Y_mean[0]

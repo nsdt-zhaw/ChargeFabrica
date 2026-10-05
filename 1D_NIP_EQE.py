@@ -9,18 +9,17 @@ from calculate_absorption import calculate_absorption_above_bandgap
 from fipy import TransientTerm, DiffusionTerm, ExponentialConvectionTerm, ImplicitSourceTerm, ResidualTerm
 import fipy
 from fipy.tools import numerix
-from newton_solver import solve_newton_coupled, CoupledChargeTerm, exponential_flux_response
+from newton_solver import (solve_newton_coupled, CoupledChargeTerm, exponential_flux_response, MeshOrderedLinearLUSolver)
 from newton_solver import LiveExponentialConvectionTerm as ExponentialConvectionTerm
 from scipy.ndimage import zoom
 from SmoothingFunction import flatten_and_smooth_all
 from joblib import Parallel, delayed
 import multiprocessing
-import copy
 from material_maps import Semiconductors, Electrodes, map_semiconductor_property, map_electrode_property, map_props, name_to_code_SC, name_to_code_EL
 from BoundaryConditions import ohmic
 from constantsfile import TInfinite, q, epsilon_0, D
 from LoadSolarSpectrum import SolarSpectrumWavelength, SolarSpectrumIrradiance
-from workflow_utils import append_to_npy, run_sweep
+from workflow_utils import run_sweep, prepare_sweep_output, solve_and_save_point
 from electrical_numerics import as_cell_array, cell_variable, conservative_internal_face_currents, srh_rate_and_carrier_derivatives, terminal_current_densities
 
 Gold_ID = name_to_code_EL["Gold"]
@@ -199,6 +198,7 @@ def solve_for_wavelength(voltage, n_values, p_values, a_values, c_values, phi_va
         damping=1.0, sweeps=1, max_steps=2000, enable_ions=True,
         physical_equations=(eqpoisson, eqn, eqp, eqa, eqc),
         update_transport_response=update_transport_response,
+        linear_solver=MeshOrderedLinearLUSolver(mesh, tolerance=1e-12, iterations=1),
         equation_tolerances=(desired_residual, desired_residual, desired_residual, desired_residual, desired_residual))
 
     # Here the electron and hole quasi-fermi levels are calculated
@@ -217,6 +217,7 @@ def solve_for_wavelength(voltage, n_values, p_values, a_values, c_values, phi_va
     return {"NMatrix": NMatrix, "PMatrix": PMatrix, "RecombinationMatrix": RecombinationMatrix, "GenValues_Matrix": GenValues_Matrix, "PotentialMatrix": PotentialMatrix, "Efield_matrix": Efield_matrix, "n": nlocal.globalValue.copy(), "p": plocal.globalValue.copy(), "phi": philocal.globalValue.copy(), "ChiMatrix": chiMatrix, "EgMatrix": EgMatrix, "psinvarmatrix": psinvarmatrix, "psipvarmatrix": psipvarmatrix, "AnionDensityMatrix": alocal.globalValue.copy(), "CationDensityMatrix": clocal.globalValue.copy(), "ResidualMatrix": residual, "SweepCounterMatrix": SweepCounter, "Recombination_Bimolecular_EQMatrix": Recombination_Bimolecular_EQMatrix, "ResidualArray": residualarray, "ConservativeJnInternal": ConservativeJnInternal, "ConservativeJpInternal": ConservativeJpInternal, "TerminalCurrentDensity": TerminalCurrentDensity, "BottomTerminalCurrentDensity": BottomTerminalCurrentDensity, "TopTerminalCurrentDensity": TopTerminalCurrentDensity, "Converged": bool(residual <= desired_residual)}
 
 def simulate_device(output_dir):
+    prepare_sweep_output(output_dir)
 
     StartingWavelength = 350  # nm
     FinalWavelength = 780  # nm
@@ -280,35 +281,30 @@ def simulate_device(output_dir):
 
         PhotonFluxArrayFinal = np.concatenate((PhotonFluxArrayOriginal, PhotonFluxArrayFinal), axis=0)
         # Add a 0 in front of Tested_Wavelengths
-        Tested_Wavelengths = np.concatenate((np.array([0.00]), Tested_Wavelengths), axis=0)
+        point_wavelengths = np.concatenate((np.array([0.00]), chunk_wavelengths), axis=0)
+        point_original_flux = np.concatenate((np.zeros_like(PhotonFluxArrayOriginal), PhotonFluxArrayOriginalSplit), axis=0)
 
         chunk_size = chunk_size + 1
 
         voltage = 0.00
 
         # Parallel computation within the chunk
-        chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(delayed(solve_for_wavelength)(voltage, n_values, p_values, a_values, c_values, phi_values, GenRateEQE) for GenRateEQE in GenerationArray)
-
-        #DeepCopy To avoid overwriting the results in next loop
-        copied_result = [copy.deepcopy(r) for r in chunk_results]
-
-        # Save dictionary of chunk_results as .npy files named after the key
-        for result in copied_result:
-            for key, value in result.items():
-                append_to_npy(output_dir, key + ".npy", value)
-
-        #Save an array of all the voltages applied so far
-        np.save(os.path.join(output_dir, "applied_wavelengths.npy"), Tested_Wavelengths)
-        np.save(os.path.join(output_dir, "PhotonFluxArrayFinal.npy"), PhotonFluxArrayFinal)
-        np.save(os.path.join(output_dir, "PhotonFluxArrayOriginal.npy"), PhotonFluxArrayOriginal)
-        np.save(os.path.join(output_dir, "PhotonFluxArrayOriginalSplit.npy"), PhotonFluxArrayOriginalSplit)
+        chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(
+            delayed(solve_and_save_point)(
+                solve_for_wavelength, output_dir, start + offset,
+                (voltage, n_values, p_values, a_values, c_values, phi_values, GenRateEQE),
+                {'applied_voltage': voltage, 'applied_wavelength': point_wavelengths[offset],
+                 'PhotonFluxArrayFinal': PhotonFluxArrayFinal[offset],
+                 'PhotonFluxArrayOriginal': PhotonFluxArrayOriginal[0],
+                 'PhotonFluxArrayOriginalSplit': point_original_flux[offset]})
+            for offset, GenRateEQE in enumerate(GenerationArray))
 
         # Update initial conditions using results from the last voltage in the chunk to speed up convergence of the next chunk
         last_result = chunk_results[-1]  # The last result in the current chunk
         n_values, p_values = last_result["n"], last_result["p"]
         a_values, c_values = last_result["AnionDensityMatrix"], last_result["CationDensityMatrix"]
         phi_values = last_result["phi"]
-    return copied_result
+    return chunk_results
 
 def main_workflow():
     return run_sweep(simulate_device, __file__, "WavelengthSweep", "Starting wavelength sweep...", "Wavelength sweep completed.")

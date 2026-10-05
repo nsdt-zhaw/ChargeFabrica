@@ -11,7 +11,7 @@ from calculate_absorption import calculate_absorption_above_bandgap
 from fipy import TransientTerm, DiffusionTerm, ExponentialConvectionTerm, ImplicitSourceTerm, ResidualTerm
 import fipy
 from fipy.tools import numerix
-from newton_solver import solve_newton_coupled, CoupledChargeTerm, exponential_flux_response
+from newton_solver import (solve_newton_coupled, CoupledChargeTerm, exponential_flux_response, MeshOrderedLinearLUSolver)
 from newton_solver import LiveExponentialConvectionTerm as ExponentialConvectionTerm
 from scipy.ndimage import zoom
 from SmoothingFunction import flatten_and_smooth_all
@@ -207,6 +207,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
         damping=1.0, sweeps=1, max_steps=2000, enable_ions=True,
         physical_equations=(eqpoisson, eqn, eqp, eqa, eqc),
         update_transport_response=update_transport_response,
+        linear_solver=MeshOrderedLinearLUSolver(mesh, tolerance=1e-12, iterations=1),
         equation_tolerances=(desired_residual, desired_residual, desired_residual, desired_residual, desired_residual))
 
     # Here the electron and hole quasi-fermi levels are calculated

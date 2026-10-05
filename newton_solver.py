@@ -9,9 +9,110 @@ import numpy as np
 import fipy
 from fipy import ImplicitSourceTerm, ExponentialConvectionTerm
 from fipy.solvers.scipy import LinearLUSolver
+from scipy.sparse.linalg import splu
 
-solver = LinearLUSolver(precon=None, iterations=1, tolerance=1e-12)
 
+class MeshOrderedLinearLUSolver(LinearLUSolver):
+    """SciPy LU with geometric separators for serial Cartesian FiPy grids.
+
+    Prefer a FiPy Grid1D/Grid2D/Grid3D mesh: infer dimensions and cell ordering
+    from it. A shape tuple remains supported in NumPy array order (ny, nx) or
+    (nz, ny, nx), with x varying fastest; its layout is the caller's responsibility.
+    FiPy orders unknowns by field. Reorder cells by nested dissection and place
+    their field unknowns together to reduce fill. Reversible row/column scaling
+    permits unpivoted LU; check backward error and fall back to FiPy's pivoted
+    LU if that factorization is singular or inaccurate.
+    """
+    def __init__(self, mesh_shape, **kwargs):
+        super(MeshOrderedLinearLUSolver, self).__init__(**kwargs)
+        mesh = mesh_shape if hasattr(mesh_shape, 'cellCenters') else None
+        if mesh is not None:
+            if mesh.communicator.Nproc != 1 or not hasattr(mesh, 'shape'):
+                raise ValueError('Mesh ordering requires a serial Cartesian grid')
+            mesh_shape = tuple(mesh.shape)[::-1]
+        shape = tuple(mesh_shape)
+        if (not 1 <= len(shape) <= 3 or
+                any(not isinstance(n, (int, np.integer)) or n < 1 for n in shape)):
+            raise ValueError('Require a positive integer Cartesian shape in 1D, 2D or 3D')
+        grid = np.arange(int(np.prod(shape))).reshape(shape)
+        if mesh is not None:
+            if mesh.dim != len(shape) or mesh.numberOfCells != grid.size:
+                raise ValueError('Mesh dimensions do not match its Cartesian shape')
+            for axis, coordinates in enumerate(np.asarray(mesh.cellCenters)):
+                axis = len(shape)-1-axis
+                index = [0]*len(shape)
+                index[axis] = slice(None)
+                line_shape = [1]*len(shape)
+                line_shape[axis] = shape[axis]
+                coordinates = coordinates.reshape(shape)
+                if not np.all(coordinates == coordinates[tuple(index)].reshape(line_shape)):
+                    raise ValueError('Mesh cells must follow Cartesian, x-fastest ordering')
+            face_cells = np.ma.asarray(mesh.faceCellIDs)
+            internal = ~np.any(np.ma.getmaskarray(face_cells), axis=0)
+            pairs = np.asarray(face_cells[:, internal], dtype=int)
+            left = np.asarray(np.unravel_index(pairs[0], shape))
+            right = np.asarray(np.unravel_index(pairs[1], shape))
+            if np.any(np.sum(abs(left-right), axis=0) != 1):
+                raise ValueError('Periodic or nonlocal mesh connections require graph ordering')
+
+        def order(region):
+            lengths = [s.stop-s.start for s in region]
+            if max(lengths) <= 8:
+                return grid[tuple(region)].ravel()
+            axis = int(np.argmax(lengths))
+            mid = (region[axis].start+region[axis].stop)//2
+            pieces = []
+            for start, stop in ((region[axis].start, mid),
+                                (mid+1, region[axis].stop), (mid, mid+1)):
+                part = list(region)
+                part[axis] = slice(start, stop)
+                pieces.append(order(part))
+            return np.concatenate(pieces)
+        self.cell_order = order([slice(0, n) for n in shape])
+        self.fallback_count = 0
+        self.last_backward_error = np.nan
+
+    def _solve_(self, L, x, b):
+        original_matrix = L
+        # FiPy 3 passes its matrix wrapper; FiPy 4 passes SciPy CSR directly.
+        if hasattr(L, 'matrix'):
+            L = L.matrix
+        cells = len(self.cell_order)
+        if L.shape[0] % cells:
+            raise ValueError('Linear system does not match the supplied Cartesian mesh')
+        permutation = (self.cell_order[:, None] + np.arange(L.shape[0]//cells)*cells).ravel()
+        matrix = L[permutation, :][:, permutation]
+        col_scale = 1./np.maximum(abs(matrix).max(axis=0).toarray().ravel(), 1e-300)
+        matrix = matrix.multiply(col_scale).tocsr()
+        row_scale = 1./np.maximum(abs(matrix).max(axis=1).toarray().ravel(), 1e-300)
+        matrix = matrix.multiply(row_scale[:, None]).tocsc()
+        rhs = row_scale*b[permutation]
+        try:
+            lu = splu(matrix, permc_spec='NATURAL', diag_pivot_thresh=0., relax=1, panel_size=10)
+            solution = lu.solve(rhs)
+            for iteration in range(3):
+                defect = rhs-matrix.dot(solution)
+                denominator = abs(matrix).dot(abs(solution))+abs(rhs)
+                error = float(np.max(abs(defect)/np.maximum(denominator, 1e-300)))
+                if np.isfinite(error) and error <= self.tolerance:
+                    break
+                if iteration < 2:
+                    solution += lu.solve(defect)
+            else:
+                raise RuntimeError('Mesh-ordered LU failed its backward-error check')
+        except RuntimeError:
+            self.fallback_count += 1
+            return super(MeshOrderedLinearLUSolver, self)._solve_(original_matrix, x, b)
+        x[permutation] = col_scale*solution
+        self.last_backward_error = error
+        # FiPy 4 records convergence explicitly; FiPy 3 has no such API.
+        if hasattr(self, '_setConvergence'):
+            self._setConvergence(suite='scipy', code=0, iterations=iteration+1,
+                                 residual=float(np.linalg.norm(L.dot(x)-b)))
+        return x
+
+
+solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1, tolerance=1e-12)
 def _newton_limits(fields, equations, corrections, correction_equations, dt,
                    tolerance, damping, max_iterations, equation_tolerances):
     """Validate controls before changing any current or old field values."""
@@ -106,7 +207,7 @@ def _solve_coupled(fields, equations, corrections, physical_equations, dt,
             for field in fields:
                 field.updateOld()
         previous_merit = merit
-        if verbose and iteration % 25 == 0:
+        if verbose and iteration % 5 == 0:
             print('iteration=%d residual=%.3g dt=%.3g alpha=%.3g' % (iteration+1, residual, dt, alpha))
     for correction in corrections:
         correction.setValue(0.)
@@ -151,7 +252,7 @@ def exponential_flux_response(density, gradient, sign, thermal_voltage):
 def solve_newton_coupled(fields, equations, corrections, dt=1e-7, max_dt=1e-5,
                  tolerance=1e-10, damping=.15, sweeps=1, max_steps=2000,
                  enable_ions=True, min_dt=1e-7, verbose=True, physical_equations=None,
-                 update_transport_response=None, equation_tolerances=None):
+                 update_transport_response=None, equation_tolerances=None, linear_solver=None):
 
     """Steady pseudo-time wrapper around the common coupled Newton engine.
 
@@ -168,7 +269,8 @@ def solve_newton_coupled(fields, equations, corrections, dt=1e-7, max_dt=1e-5,
     if not np.isfinite(min_dt) or not np.isfinite(max_dt) or not 0 < min_dt <= dt <= max_dt:
         raise ValueError('Require 0 < min_dt <= dt <= max_dt, all finite')
     result, iterations, values = _solve_coupled(fields, equations, corrections,
-        physical_equations, dt, tolerance, limits, damping, max_steps, solver,
+        physical_equations, dt, tolerance, limits, damping, max_steps,
+        solver if linear_solver is None else linear_solver,
         update_transport_response, steady=True, min_dt=min_dt, max_dt=max_dt,
         verbose=verbose)
     history = np.full(max_steps, np.nan)

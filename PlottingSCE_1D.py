@@ -1,16 +1,21 @@
 import numpy as np
+from workflow_utils import load_results
 import matplotlib.pyplot as plt
 
 #Plotting code for Spatial Collection Efficiency (SCE) calculation from 1D drift-diffusion simulation data
 Simulation_folder = "./Outputs/1D_NIP_SCE_Example/VoltageSweep/"
 
-GenValues_Matrix_default = np.load(Simulation_folder + "GenValues_Matrix.npy")[0]
-GenValues_Matrix_SCE = np.load(Simulation_folder + "GenValues_Matrix.npy")[1:]
+results = load_results(Simulation_folder)
+if results['excitation_indices'][0] != -1:
+    raise ValueError('The baseline SCE point has not completed yet.')
 
-Position_SCE = np.load(Simulation_folder + "excitation_indices.npy")[0:GenValues_Matrix_SCE.shape[0]]
+GenValues_Matrix_default = results["GenValues_Matrix"][0]
+GenValues_Matrix_SCE = results["GenValues_Matrix"][1:]
 
-Jn_Matrix = np.load(Simulation_folder + "ConservativeJnInternal.npy")
-Jp_Matrix = np.load(Simulation_folder + "ConservativeJpInternal.npy")
+Position_SCE = results["excitation_indices"][1:1 + GenValues_Matrix_SCE.shape[0]]
+
+Jn_Matrix = results["ConservativeJnInternal"]
+Jp_Matrix = results["ConservativeJpInternal"]
 JTotal_Y = (Jn_Matrix + Jp_Matrix)
 
 JTotal_Y_default = JTotal_Y[0]

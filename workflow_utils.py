@@ -26,7 +26,7 @@ def run_sweep(simulate_device, script_path, sweep_folder,
     return results
 
 
-def prepare_voltage_output(output_dir):
+def prepare_sweep_output(output_dir):
     """Reserve a fresh point directory; never mix separate simulation runs."""
     directory = os.path.join(output_dir, "points")
     if os.path.exists(directory):
@@ -35,13 +35,26 @@ def prepare_voltage_output(output_dir):
     os.mkdir(directory)
 
 
+prepare_voltage_output = prepare_sweep_output
+
+
 def solve_and_save_voltage(solve, output_dir, index, voltage, *args):
     """Publish a worker's result immediately, before the rest of its batch ends."""
-    result = solve(voltage, *args)
+    return solve_and_save_point(solve, output_dir, index, (voltage,) + args,
+                                {'applied_voltage': voltage})
+
+
+def solve_and_save_point(solve, output_dir, index, args, metadata):
+    """Atomically publish a complete result with its sweep coordinate and inputs."""
+    result = solve(*args)
+    if set(result).intersection(metadata) or 'sweep_index' in result or 'sweep_index' in metadata:
+        raise ValueError('Point metadata must not overwrite result fields or sweep_index')
+    point_data = dict(result)
+    point_data.update(metadata)
     path = os.path.join(output_dir, "points", "point_%08d.npz" % index)
     temporary = path + ".tmp"
     with open(temporary, "wb") as destination:
-        np.savez(destination, applied_voltage=voltage, sweep_index=index, **result)
+        np.savez(destination, sweep_index=index, **point_data)
     os.rename(temporary, path)
     return result
 
@@ -49,19 +62,22 @@ def solve_and_save_voltage(solve, output_dir, index, voltage, *args):
 def load_results(output_dir, keys=None):
     """Load one consistent snapshot in sweep order, or legacy per-field NPY files."""
     directory = os.path.join(output_dir, "points")
+    coordinates = {'applied_voltages': 'applied_voltage',
+                   'applied_wavelengths': 'applied_wavelength',
+                   'excitation_indices': 'excitation_index'}
     if os.path.isdir(directory):
         paths = sorted(glob.glob(os.path.join(directory, "point_*.npz")))
         if not paths:
-            raise ValueError("No completed voltage points yet in %s" % output_dir)
+            raise ValueError("No completed sweep points yet in %s" % output_dir)
         values = {}
         for path in paths:
             with np.load(path) as point:
                 if keys is None:
                     keys = [key for key in point.files
-                            if key not in ("applied_voltage", "sweep_index")]
-                    keys.append("applied_voltages")
+                            if key not in list(coordinates.values()) + ['sweep_index']]
+                    keys.extend(key for key, source in coordinates.items() if source in point.files)
                 for key in keys:
-                    source = "applied_voltage" if key == "applied_voltages" else key
+                    source = coordinates.get(key, key)
                     values.setdefault(key, []).append(point[source])
         return dict((key, np.asarray(value)) for key, value in values.items())
     if keys is None:
