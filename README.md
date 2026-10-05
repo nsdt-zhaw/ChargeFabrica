@@ -70,7 +70,7 @@ Here we provide a list of instructional videos to help new users get familiar wi
 ## Computation Time using Newton method
 The 1D compute time with ions enabled on a Intel(R) Core(TM) i9-12900 desktop PC is roughly 30 seconds.
 
-The 2D compute time with ions enabled on a dedicated server with AMD EPYC 74F3 processor for ~100k elements is roughly 45 minutes.
+The 2D compute time with ions enabled on a dedicated server with AMD EPYC 74F3 processor for ~100k elements is roughly 30 minutes.
 
 It is therefore **strongly** recommended to test the code in 1D before moving to 2D.
 
