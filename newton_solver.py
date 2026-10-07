@@ -5,13 +5,15 @@ Device equations stay in the examples; FiPy assembles residuals and matrices.
 from __future__ import division, print_function
 
 import numpy as np
+import time
 import fipy
-from fipy import ImplicitSourceTerm, ResidualTerm
-from electrical_numerics import ExponentialConvectionTerm
+from fipy import ImplicitSourceTerm, ExponentialConvectionTerm, ResidualTerm
 from fipy.terms.binaryTerm import _BinaryTerm
 from fipy.solvers.scipy import LinearLUSolver
 from scipy.sparse.linalg import splu
+from fipy.terms.explicitSourceTerm import _ExplicitSourceTerm
 
+_iteration_clock = getattr(time, 'perf_counter', time.time)
 
 class MeshOrderedLinearLUSolver(LinearLUSolver):
     """SciPy LU with geometric separators for serial Cartesian FiPy grids.
@@ -104,8 +106,6 @@ class MeshOrderedLinearLUSolver(LinearLUSolver):
         return x
 
 
-solver = fipy.solvers.LinearLUSolver(precon=None, iterations=1, tolerance=1e-12)
-
 def fresh_equation(equation):
     """Copy assembly state, retaining live fields and coefficients (FiPy 3/4)."""
     if isinstance(equation, _BinaryTerm):
@@ -117,6 +117,25 @@ class IndependentResidualTerm(ResidualTerm):
     def __init__(self, equation, underRelaxation=1.):
         super(IndependentResidualTerm, self).__init__(
             equation=fresh_equation(equation), underRelaxation=underRelaxation)
+
+    def _buildMatrix(self, var, SparseMatrix, boundaryConditions=(), dt=None,
+                     transientGeomCoeff=None, diffusionGeomCoeff=None):
+        vec = _residual_vector(self.equation,
+                    boundaryConditions=boundaryConditions, dt=dt)
+        self.coeff = fipy.CellVariable(mesh=var.mesh, value=vec*self.underRelaxation)
+        self.geomCoeff = None
+        self.coeffVectors = None
+        return _ExplicitSourceTerm._buildMatrix(self, var=var,
+            SparseMatrix=SparseMatrix, boundaryConditions=boundaryConditions,
+            dt=dt, transientGeomCoeff=transientGeomCoeff,
+            diffusionGeomCoeff=diffusionGeomCoeff)
+
+
+def _residual_vector(equation, **kwargs):
+    """Always assemble independent residuals with SciPy, like the Newton solve."""
+    return np.asarray(equation.justResidualVector(
+        solver=LinearLUSolver(), **kwargs)).copy()
+
 
 def _newton_limits(fields, equations, corrections, correction_equations, dt,
                    tolerance, damping, max_iterations, equation_tolerances):
@@ -138,6 +157,8 @@ def _solve_coupled(fields, equations, corrections, physical_equations, dt,
                    max_dt=None, verbose=False, line_search=True, potential_limit=.08):
     """Solve increments, or candidate fields when corrections=None; verify physics."""
     increments = () if corrections is None else corrections
+    if not isinstance(linear_solver, LinearLUSolver):
+        raise ValueError('Newton requires a SciPy LinearLUSolver or MeshOrderedLinearLUSolver')
     block = equations[0]
     for equation in equations[1:]:
         block = block & equation
@@ -147,6 +168,7 @@ def _solve_coupled(fields, equations, corrections, physical_equations, dt,
         block(fields if corrections is None else corrections)
     history, previous_merit = [], np.inf
     for iteration in range(max_iterations):
+        iteration_start = _iteration_clock()
         values = np.array([field.value for field in fields])
         for correction in increments:
             correction.setValue(0.)
@@ -165,7 +187,7 @@ def _solve_coupled(fields, equations, corrections, physical_equations, dt,
         if residual <= tolerance and merit <= 1:
             for correction in increments:
                 correction.setValue(0.)
-            verified = np.asarray([np.linalg.norm(eq.justResidualVector(dt=1e100 if steady else dt))
+            verified = np.asarray([np.linalg.norm(_residual_vector(eq, dt=1e100 if steady else dt))
                                    for eq in physical_equations])
             if sum(verified) <= tolerance and np.all(verified <= limits):
                 history[-1] = float(sum(verified))
@@ -199,7 +221,7 @@ def _solve_coupled(fields, equations, corrections, physical_equations, dt,
                 field.setValue(value)
             if not search:
                 break
-            trial = np.asarray([np.linalg.norm(eq.justResidualVector(dt=dt)) for eq in physical_equations])
+            trial = np.asarray([np.linalg.norm(_residual_vector(eq, dt=dt)) for eq in physical_equations])
             trial_merit = max(float(sum(trial))/tolerance, float(np.max(trial/limits)))
             search_merit = trial_merit if use_components else float(sum(trial))/tolerance
             if np.all(np.isfinite(trial)) and (trial_merit <= 1. or search_merit <= (1-1e-4*alpha)*start_merit):
@@ -213,7 +235,8 @@ def _solve_coupled(fields, equations, corrections, physical_equations, dt,
                 field.updateOld()
         previous_merit = merit
         if verbose and iteration % 5 == 0:
-            print('iteration=%d residual=%.3g dt=%.3g alpha=%.3g' % (iteration+1, residual, dt, alpha))
+            print('iteration=%d residual=%.3g dt=%.3g alpha=%.3g time_per_iteration=%.3fs' %
+                  (iteration+1, residual, dt, alpha, _iteration_clock()-iteration_start))
     for correction in increments:
         correction.setValue(0.)
     raise RuntimeError('Coupled Newton did not converge after %d iterations: dt=%g residual=%g component ratios=%s' % (max_iterations, dt, history[-1], norms/limits))
@@ -281,7 +304,7 @@ def solve_newton_coupled(fields, equations, corrections=None, dt=1e-7, max_dt=1e
         raise ValueError('Require 0 < min_dt <= dt <= max_dt, all finite')
     result, iterations, values = _solve_coupled(fields, equations, corrections,
         physical_equations, dt, tolerance, limits, damping, max_steps,
-        solver if linear_solver is None else linear_solver,
+        MeshOrderedLinearLUSolver(fields[0].mesh, tolerance=1e-12, iterations=1) if linear_solver is None else linear_solver,
         update_transport_response, steady=True, min_dt=min_dt, max_dt=max_dt,
         verbose=verbose)
     history = np.full(max_steps, np.nan)
