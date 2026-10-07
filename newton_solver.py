@@ -6,7 +6,8 @@ from __future__ import division, print_function
 
 import numpy as np
 import fipy
-from fipy import ImplicitSourceTerm, ExponentialConvectionTerm, ResidualTerm
+from fipy import ImplicitSourceTerm, ResidualTerm
+from electrical_numerics import ExponentialConvectionTerm
 from fipy.terms.binaryTerm import _BinaryTerm
 from fipy.solvers.scipy import LinearLUSolver
 from scipy.sparse.linalg import splu
