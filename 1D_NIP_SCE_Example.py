@@ -7,11 +7,12 @@ os.environ["OMP_NUM_THREADS"] = "1" #Really important! Pysparse doesnt benefit f
 import numpy as np
 from mark_interface_file import mark_interfaces, mark_interfaces_mixed
 from calculate_absorption import calculate_absorption_above_bandgap
-from fipy import TransientTerm, DiffusionTerm, ExponentialConvectionTerm, ImplicitSourceTerm, ResidualTerm
+from fipy import TransientTerm, DiffusionTerm, ImplicitSourceTerm
 import fipy
 from fipy.tools import numerix
 from newton_solver import (solve_newton_coupled, CoupledChargeTerm, exponential_flux_response, MeshOrderedLinearLUSolver)
 from newton_solver import LiveExponentialConvectionTerm as ExponentialConvectionTerm
+from newton_solver import IndependentResidualTerm as ResidualTerm, fresh_equation
 from scipy.ndimage import zoom
 from SmoothingFunction import flatten_and_smooth_all
 from joblib import Parallel, delayed
@@ -135,9 +136,6 @@ def solve_for_excitation_site(excitation_index, n_values, p_values, a_values, c_
     state_values = (phi_values, n_values, p_values, a_values, c_values)
     philocal, nlocal, plocal, alocal, clocal = [cell_variable(mesh, name, value, True) for name, value in zip(state_names, state_values)]
 
-    correction_names = ('d_hole', 'd_electron', 'd_anion', 'd_cation', 'd_potential')
-    dplocal, dnlocal, dalocal, dclocal, dphilocal = [cell_variable(mesh, name, has_old=False) for name in correction_names]
-
     if excitation_index == -1:
         SCERegion = np.zeros(np.size(DeviceArchitechture))
     else:
@@ -158,11 +156,8 @@ def solve_for_excitation_site(excitation_index, n_values, p_values, a_values, c_
 
     for bc in contact_bcs:
             nlocal.constrain(bc['n'], where=bc['boundary'])
-            dnlocal.constrain(0., where=bc['boundary'])
             plocal.constrain(bc['p'], where=bc['boundary'])
-            dplocal.constrain(0., where=bc['boundary'])
             philocal.constrain(bc['phi'], where=bc['boundary'])
-            dphilocal.constrain(0., where=bc['boundary'])
 
     #Band-to-band recombination models
     Recombination_Langevin_EQ = (Recombination_Langevin_Cell * q * (pmob + nmob) * (nlocal * plocal - niPS * niPS) / (epsilon_values * epsilon_0))
@@ -182,19 +177,21 @@ def solve_for_excitation_site(excitation_index, n_values, p_values, a_values, c_
 
     net_dR_dn = Recombination_Bimolecular_Cell * plocal + SRH_Bulk_dR_dn
     net_dR_dp = Recombination_Bimolecular_Cell * nlocal + SRH_Bulk_dR_dp
-        #Due to ongoing FiPy issue #https://github.com/usnistgov/fipy/issues/1235, this line must be a function
-    def recombination_correction():
-        return (ImplicitSourceTerm(coeff=q * net_dR_dn, var=dnlocal) + ImplicitSourceTerm(coeff=q * net_dR_dp, var=dplocal))
+    physical_equations = tuple(fresh_equation(eq) for eq in (eqpoisson, eqn, eqp, eqa, eqc))
 
-    # Equivalent positive-diagonal form keeps cross-recombination blocks implicit.
-    deqn = (TransientTerm(coeff=q, var=dnlocal) - DiffusionTerm(coeff=q * D * nmob.harmonicFaceValue, var=dnlocal) + ExponentialConvectionTerm(coeff=q * nmob.harmonicFaceValue * (philocal.faceGrad + ChiCell.faceGrad + D * LogNcCell.faceGrad), var=dnlocal) + recombination_correction() + ResidualTerm(equation=eqn))
-    deqp = (TransientTerm(coeff=q, var=dplocal) - DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=dplocal) - ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * (philocal.faceGrad + ChiCell.faceGrad + EgCell.faceGrad - D * LogNvCell.faceGrad), var=dplocal) + recombination_correction() + ResidualTerm(equation=eqp))
-    deqa = (TransientTerm(coeff=q, var=dalocal) - DiffusionTerm(coeff=q * D * anionmob.harmonicFaceValue, var=dalocal) + ExponentialConvectionTerm(coeff=q * anionmob.harmonicFaceValue * (philocal.faceGrad + ChiCell_a.faceGrad), var=dalocal) + ResidualTerm(equation=eqa))
-    deqc = (TransientTerm(coeff=q, var=dclocal) - DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=dclocal) - ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * (philocal.faceGrad + ChiCell_c.faceGrad), var=dclocal) + ResidualTerm(equation=eqc))
-    deqpoisson = ((0.00 == -TransientTerm(var=dphilocal) + DiffusionTerm(coeff=epsilon, var=dphilocal)) + ResidualTerm(equation=eqpoisson))
-    #CoupledChargeTerm is introduced to keep the off-diagonal charge terms implicit, which is important for convergence in coupled systems.
-    deqpoisson += sum(CoupledChargeTerm(coeff=sign*q/epsilon_0, var=delta)
-                      for sign, delta in ((1, dplocal), (-1, dnlocal), (1, dclocal), (-1, dalocal)))
+    # Add a derivative to the matrix without changing the physical residual.
+    # FiPy assembles the subtraction at the current state before solving.
+    def jacobian_only(term):
+        return term + ResidualTerm(equation=term, underRelaxation=-1.)
+
+    # Fresh terms per row: FiPy terms carry mutable assembly caches (issue #1235).
+    def recombination_derivative():
+        return (ImplicitSourceTerm(coeff=q*net_dR_dn, var=nlocal)
+                + ImplicitSourceTerm(coeff=q*net_dR_dp, var=plocal))
+    eqn += jacobian_only(recombination_derivative())
+    eqp += jacobian_only(recombination_derivative())
+    eqpoisson += jacobian_only(sum(CoupledChargeTerm(coeff=sign*q/epsilon_0, var=field)
+        for sign, field in ((1, plocal), (-1, nlocal), (1, clocal), (-1, alocal))))
 
     responses = [fipy.FaceVariable(mesh=mesh, value=0.) for _ in range(4)]
     gradients = (philocal.faceGrad+ChiCell.faceGrad+D*LogNcCell.faceGrad,
@@ -203,21 +200,20 @@ def solve_for_excitation_site(excitation_index, n_values, p_values, a_values, c_
     def update_transport_response():
         for response, field, gradient, sign in zip(responses, (nlocal, plocal, alocal, clocal), gradients, (1, -1, 1, -1)):
             response.setValue(exponential_flux_response(field, gradient, sign, D))
-    deqn += DiffusionTerm(coeff=q*nmob.harmonicFaceValue*responses[0], var=dphilocal)
-    deqp -= DiffusionTerm(coeff=q*pmob.harmonicFaceValue*responses[1], var=dphilocal)
-    deqa += DiffusionTerm(coeff=q*anionmob.harmonicFaceValue*responses[2]*(~mesh.exteriorFaces), var=dphilocal)
-    deqc -= DiffusionTerm(coeff=q*cationmob.harmonicFaceValue*responses[3]*(~mesh.exteriorFaces), var=dphilocal)
+    eqn += jacobian_only(DiffusionTerm(coeff=q*nmob.harmonicFaceValue*responses[0], var=philocal))
+    eqp += jacobian_only(-DiffusionTerm(coeff=q*pmob.harmonicFaceValue*responses[1], var=philocal))
+    eqa += jacobian_only(DiffusionTerm(coeff=q*anionmob.harmonicFaceValue*responses[2]*(~mesh.exteriorFaces), var=philocal))
+    eqc += jacobian_only(-DiffusionTerm(coeff=q*cationmob.harmonicFaceValue*responses[3]*(~mesh.exteriorFaces), var=philocal))
 
     desired_residual = 1e-12
     # The full block uses unit damping, with pseudo-time regularization retained.
     # Separate continuity tolerances prevent the Poisson norm masking slow ions.
     residual, SweepCounter, residualarray = solve_newton_coupled(
         fields=(philocal, nlocal, plocal, alocal, clocal),
-        equations=(deqpoisson, deqn, deqp, deqa, deqc),
-        corrections=(dphilocal, dnlocal, dplocal, dalocal, dclocal),
+        equations=(eqpoisson, eqn, eqp, eqa, eqc),
         dt=1e-7, max_dt=1e-5, tolerance=desired_residual,
         damping=1.0, sweeps=1, max_steps=2000, enable_ions=True,
-        physical_equations=(eqpoisson, eqn, eqp, eqa, eqc),
+        physical_equations=physical_equations,
         update_transport_response=update_transport_response,
         linear_solver=MeshOrderedLinearLUSolver(mesh, tolerance=1e-12, iterations=1),
         equation_tolerances=(desired_residual, desired_residual, desired_residual, desired_residual, desired_residual))
