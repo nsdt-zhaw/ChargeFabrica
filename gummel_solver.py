@@ -7,6 +7,8 @@ def solve_gummel(fields, equations, dt=1e-9, max_dt=1e-6, tolerance=1e-10, dampi
 
     phi, n, p, a, c = fields
     eqpoisson, eqn, eqp, eqa, eqc = equations
+    ions = ((a, eqa), (c, eqc)) + tuple(extra_ions)
+    old_fields = (n, p, a, c, phi) + tuple(fixed_fields) + tuple(field for field, equation in ions[2:])
     residual, residual_old, dt_old, total_time, steps = 1., 1e10, dt, 0.0, 0
     residual_history = np.zeros(max_steps)
 
@@ -19,18 +21,13 @@ def solve_gummel(fields, equations, dt=1e-9, max_dt=1e-6, tolerance=1e-10, dampi
             phi.setValue(damping * phi + (1 - damping) * phi.old) # The potential should be damped BEFORE passing to the continuity equations!
 
             residual = eqn.sweep(dt = dt, solver=solver) + eqp.sweep(dt = dt, solver=solver)
-            n.setValue(damping * np.maximum(n, 1.00e-30) + (1 - damping) * n.old)
-            p.setValue(damping * np.maximum(p, 1.00e-30) + (1 - damping) * p.old)
+            for field in (n, p):
+                field.setValue(damping * np.maximum(field, 1.00e-30) + (1 - damping) * field.old)
 
         if enable_ions:
             #Here the ionic continuity equations are solved
-            ion_residual = eqa.sweep(dt=dt, solver=solver) + eqc.sweep(dt=dt, solver=solver)
-            for field, equation in extra_ions:
-                ion_residual += equation.sweep(dt=dt, solver=solver)
-            residual += ion_residual
-            a.setValue(damping * a + (1 - damping) * a.old)
-            c.setValue(damping * c + (1 - damping) * c.old)
-            for field, equation in extra_ions:
+            residual += sum(equation.sweep(dt=dt, solver=solver) for field, equation in ions)
+            for field, equation in ions:
                 field.setValue(damping * field + (1 - damping) * field.old)
 
         residual_history[steps] = residual
@@ -49,9 +46,8 @@ def solve_gummel(fields, equations, dt=1e-9, max_dt=1e-6, tolerance=1e-10, dampi
         dt_old, residual_old = dt, residual
 
         #Update old
-        for v in (n, p, a, c, phi): v.updateOld()
-        for v in fixed_fields: v.updateOld()
-        for field, equation in extra_ions: field.updateOld()
+        for field in old_fields:
+            field.updateOld()
 
         total_time += dt
 

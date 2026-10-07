@@ -6,6 +6,20 @@ def cell_variable(mesh, name, value=0.0, has_old=False):
     from fipy import CellVariable
     return CellVariable(name=name, mesh=mesh, value=value, hasOld=has_old)
 
+def device_field(mesh, architecture, name, values=None, smoothing=0.0, logarithm=False):
+    """Map a material property or supplied array onto a FiPy mesh.
+
+    Smoothing is a Gaussian width in architecture pixels. Take logarithms
+    before smoothing, as required for the density-of-states energy gradients.
+    All device settings are supplied by the caller; no example globals are used.
+    """
+    from SmoothingFunction import flatten_and_smooth_all
+    if values is None:
+        from material_maps import map_semiconductor_property
+        values = map_semiconductor_property(architecture, name)
+    values = np.log(values) if logarithm else np.asarray(values)
+    return cell_variable(mesh, name, flatten_and_smooth_all([values], smoothing)[0])
+
 def as_cell_array(value, shape):
     """Return a FiPy or NumPy cell field in device-array ordering."""
     raw_value = getattr(value, "value", value)
