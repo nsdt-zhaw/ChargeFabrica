@@ -369,10 +369,21 @@ $$
 \qquad \mathbf J=\frac{\partial\mathbf F}{\partial\mathbf u}.
 $$
 
-Then update the fields with the accepted correction and damping factor.
+The code implements this step by solving directly for candidate physical fields
+$\mathbf u^*$:
+
+$$
+\mathbf J(\mathbf u^{(m)})\mathbf u^*
+=\mathbf J(\mathbf u^{(m)})\mathbf u^{(m)}-\mathbf F(\mathbf u^{(m)}),
+\qquad \delta\mathbf u=\mathbf u^*-\mathbf u^{(m)}.
+$$
+
 There are five unknowns per cell, so $N$ cells give a $5N\times5N$ system.
-The correction order is
-`(dphilocal, dnlocal, dplocal, dalocal, dclocal)`.
+The field order is `(philocal, nlocal, plocal, alocal, clocal)`. There are no
+separate FiPy correction variables: `_solve_coupled()` saves the current values,
+solves for the candidate fields, computes the NumPy array `deltas`, and restores
+the current values before applying damping. The mathematical Newton update
+$\delta\mathbf u$ is still needed; it is represented by this array.
 
 The Jacobian has the structure
 
@@ -388,31 +399,51 @@ $$
 
 | Block | Meaning | Code |
 | --- | --- | --- |
-| $J_{\phi\phi}$ | Dielectric Laplacian and potential pseudo-time regularization | `deqpoisson` |
-| $J_{\phi s}$ | Signed charge response to each density increment | `CoupledChargeTerm` in `deqpoisson` |
-| $J_{nn},J_{pp}$ | Storage, fixed-potential transport and self-recombination derivative | `deqn`, `deqp`, `recombination_correction()` |
+| $J_{\phi\phi}$ | Dielectric Laplacian and potential pseudo-time regularization | `eqpoisson` |
+| $J_{\phi s}$ | Signed charge response to each density update | `CoupledChargeTerm` in `eqpoisson` |
+| $J_{nn},J_{pp}$ | Storage, fixed-potential transport and self-recombination derivative | `eqn`, `eqp`, `recombination_derivative()` |
 | $J_{np},J_{pn}$ | Cross-carrier recombination derivatives | `net_dR_dp`, `net_dR_dn` |
 | $J_{s\phi}$ | Potential derivative of the fitted transport flux | `responses`, `update_transport_response()` and potential diffusion blocks |
-| $J_{aa},J_{cc}$ | Ionic storage and fixed-potential transport | `deqa`, `deqc` |
+| $J_{aa},J_{cc}$ | Ionic storage and fixed-potential transport | `eqa`, `eqc` |
+
+### Adding Jacobian terms without changing the physical equations
+
+Before adding derivatives, the example saves independent copies of the original
+equations in `physical_equations` for convergence verification. It then adds
+matrix contributions to the equations acting on the physical fields:
+
+```python
+def jacobian_only(term):
+    return term + ResidualTerm(equation=term, underRelaxation=-1.)
+```
+
+Here `ResidualTerm` is the example's alias for `IndependentResidualTerm` from
+`newton_solver.py`. At the current state, the explicit residual subtraction
+cancels the added term's residual, while retaining its matrix contribution.
+For a linear term with matrix $K$, this adds $K$ to the matrix and
+$K\mathbf u^{(m)}$ to the right-hand side. It changes the Jacobian used for the
+candidate solve without changing the physical residual at the current state.
 
 ### Poisson charge blocks
 
-For the Poisson residual written in Section 2, the variation is
+The examples write the Poisson relaxation as `TransientTerm == DiffusionTerm + charge`.
+FiPy assembles the left side minus the right side, so its residual variation is
 
 $$
-\delta F_\phi=\nabla\cdot(\epsilon_r\nabla\delta\phi)
-+\frac{q}{\epsilon_0}(\delta p-\delta n+\delta c-\delta a).
+\delta F_\phi=\frac{\delta\phi}{\Delta\tau}
+-\nabla\cdot(\epsilon_r\nabla\delta\phi)
+-\frac{q}{\epsilon_0}(\delta p-\delta n+\delta c-\delta a).
 $$
 
 The device adds these charge blocks explicitly:
 
 ```python
-deqpoisson += sum(
-    CoupledChargeTerm(coeff=sign*q/epsilon_0, var=delta)
-    for sign, delta in (
-        (1, dplocal), (-1, dnlocal), (1, dclocal), (-1, dalocal)
+eqpoisson += jacobian_only(sum(
+    CoupledChargeTerm(coeff=sign*q/epsilon_0, var=field)
+    for sign, field in (
+        (-1, plocal), (1, nlocal), (-1, clocal), (1, alocal)
     )
-)
+))
 ```
 
 `CoupledChargeTerm` retains either sign in the implicit matrix. Ordinary
@@ -427,15 +458,17 @@ $$
 q\,\delta R=qR_n\delta n+qR_p\delta p.
 $$
 
-`recombination_correction()` creates fresh FiPy source terms for each row.
+`recombination_derivative()` creates fresh FiPy source terms for each row,
+acting on `nlocal` and `plocal`. Both carrier equations receive these terms
+through `jacobian_only()`.
 The potential–transport blocks differentiate the fitted drift flux, rather
 than substituting an equilibrium density response. For example:
 
 ```python
-deqn += DiffusionTerm(
-    coeff=q * nmob.harmonicFaceValue * responses[0], var=dphilocal)
-deqp -= DiffusionTerm(
-    coeff=q * pmob.harmonicFaceValue * responses[1], var=dphilocal)
+eqn += jacobian_only(DiffusionTerm(
+    coeff=q * nmob.harmonicFaceValue * responses[0], var=philocal))
+eqp += jacobian_only(-DiffusionTerm(
+    coeff=q * pmob.harmonicFaceValue * responses[1], var=philocal))
 ```
 
 `update_transport_response()` refreshes all four face response fields before
@@ -444,27 +477,32 @@ signs and mask exterior faces to preserve blocking boundaries.
 
 ### FiPy assembly and solve
 
-`solve_for_voltage()` supplies all five correction equations, all five physical
-equations and the response callback to `solve_newton_coupled()`.
+`solve_for_voltage()` supplies all five physical fields, the five linearized
+equations with Jacobian additions, the original `physical_equations`, and the
+response callback to `solve_newton_coupled()`.
 The common `_solve_coupled()` engine assembles them through FiPy:
 
 ```python
 block = equations[0]
 for equation in equations[1:]:
     block = block & equation
-block(corrections)  # Fix the unknown ordering explicitly.
+block(fields)  # Fix the physical-field ordering explicitly.
 block.sweep(dt=dt, solver=linear_solver, cacheResidual=True)
 ```
 
 FiPy's `&` combines the supplied blocks; it does not generate missing nonlinear
-derivatives. Its public ordering API fixes the correction order. See
+derivatives. Its public ordering API fixes the field order. See
 [FiPy's coupled-equation documentation](https://pages.nist.gov/fipy/en/latest/USAGE.html).
-The shared default uses FiPy's SciPy `LinearLUSolver`.
+The shared default uses the SciPy-based `MeshOrderedLinearLUSolver`.
 
-`ResidualTerm(equation=...)` supplies the current physical residual to each
-linear correction equation. Depending on which side of `==` a term appears,
-FiPy can use an overall row sign; residual and derivative conventions must
-remain consistent.
+The sweep writes candidate values into the physical fields. The driver derives
+`deltas` from those candidates and uses the existing pseudo-time damping policy
+to accept the update. Final convergence is checked against `physical_equations`,
+with effectively infinite `dt` to test the stationary residual without
+pseudo-time storage. All residual-only assembly explicitly uses SciPy.
+
+Depending on which side of `==` a term appears, FiPy can use an overall row
+sign; residual and derivative conventions must remain consistent.
 
 Coupling resolves potential, transport, recombination and charge feedback in
 one linear solve. A sequential iteration delays parts of this feedback until
