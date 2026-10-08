@@ -4,7 +4,7 @@
 #Device architecture: FTO (Boundary)|TiO2 (50 nm)|MAPbI3 (1600 nm)|Carbon (Boundary)
 #The solver uses the Newton method to accelerate convergence.
 import os
-os.environ["OMP_NUM_THREADS"] = "1" #Really important! Pysparse doesnt benefit from multithreading.
+os.environ["OMP_NUM_THREADS"] = "1" # Avoid thread oversubscription across voltage workers.
 import numpy as np
 from mark_interface_file import mark_interfaces, mark_interfaces_mixed
 from calculate_absorption import calculate_absorption_above_bandgap
@@ -162,8 +162,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     eqp = (TransientTerm(coeff=q, var=plocal) == DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=plocal) + ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * hole_drift, var=plocal) + q*gen_rate - q*Recombination_Combined)
     eqa = (TransientTerm(coeff=q, var=alocal) == DiffusionTerm(coeff=q * D * anionmob.harmonicFaceValue, var=alocal) - ExponentialConvectionTerm(coeff=q * anionmob.harmonicFaceValue * anion_drift, var=alocal))
     eqc = (TransientTerm(coeff=q, var=clocal) == DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=clocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * cation_drift, var=clocal))
-    eqpoisson = (0.00 == -TransientTerm(var=philocal) + DiffusionTerm(coeff=epsilon, var=philocal) + (q/epsilon_0) * (plocal - nlocal + clocal - alocal + NdCell - NaCell))
-
+    eqpoisson = (TransientTerm(var=philocal) == DiffusionTerm(coeff=epsilon, var=philocal) + (q/epsilon_0) * (plocal - nlocal + clocal - alocal + NdCell - NaCell))
 
     physical_equations = tuple(fresh_equation(eq) for eq in (eqpoisson, eqn, eqp, eqa, eqc))
 
@@ -179,7 +178,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     eqn += jacobian_only(recombination_derivative())
     eqp += jacobian_only(recombination_derivative())
     eqpoisson += jacobian_only(sum(CoupledChargeTerm(coeff=sign*q/epsilon_0, var=field)
-        for sign, field in ((1, plocal), (-1, nlocal), (1, clocal), (-1, alocal))))
+        for sign, field in ((-1, plocal), (1, nlocal), (-1, clocal), (1, alocal))))
 
     responses = [fipy.FaceVariable(mesh=mesh, value=0.) for _ in range(4)]
     gradients = (electron_drift, hole_drift, anion_drift, cation_drift)
@@ -201,6 +200,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
         damping=1.0, sweeps=1, max_steps=2000, enable_ions=True,
         physical_equations=physical_equations,
         update_transport_response=update_transport_response,
+        # Explicit SciPy LU; no command-line backend selection is needed.
         linear_solver=MeshOrderedLinearLUSolver(mesh, tolerance=1e-12, iterations=1),
         equation_tolerances=(desired_residual, desired_residual, desired_residual, desired_residual, desired_residual))
 

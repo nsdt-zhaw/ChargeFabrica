@@ -174,7 +174,7 @@ def solve_for_excitation_site(excitation_index, n_values, p_values, a_values, c_
     eqp = (TransientTerm(coeff=q, var=plocal) == DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=plocal) + ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * hole_drift, var=plocal) + q*gen_rate - q*Recombination_Combined)
     eqa = (TransientTerm(coeff=q, var=alocal) == DiffusionTerm(coeff=q * D * anionmob.harmonicFaceValue, var=alocal) - ExponentialConvectionTerm(coeff=q * anionmob.harmonicFaceValue * anion_drift, var=alocal))
     eqc = (TransientTerm(coeff=q, var=clocal) == DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=clocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * cation_drift, var=clocal))
-    eqpoisson = (0.00 == -TransientTerm(var=philocal) + DiffusionTerm(coeff=epsilon, var=philocal) + (q/epsilon_0) * (plocal - nlocal + clocal - alocal + NdCell - NaCell))
+    eqpoisson = (TransientTerm(var=philocal) == DiffusionTerm(coeff=epsilon, var=philocal) + (q/epsilon_0) * (plocal - nlocal + clocal - alocal + NdCell - NaCell))
 
     physical_equations = tuple(fresh_equation(eq) for eq in (eqpoisson, eqn, eqp, eqa, eqc))
 
@@ -190,7 +190,7 @@ def solve_for_excitation_site(excitation_index, n_values, p_values, a_values, c_
     eqn += jacobian_only(recombination_derivative())
     eqp += jacobian_only(recombination_derivative())
     eqpoisson += jacobian_only(sum(CoupledChargeTerm(coeff=sign*q/epsilon_0, var=field)
-        for sign, field in ((1, plocal), (-1, nlocal), (1, clocal), (-1, alocal))))
+        for sign, field in ((-1, plocal), (1, nlocal), (-1, clocal), (1, alocal))))
 
     responses = [fipy.FaceVariable(mesh=mesh, value=0.) for _ in range(4)]
     gradients = (electron_drift, hole_drift, anion_drift, cation_drift)

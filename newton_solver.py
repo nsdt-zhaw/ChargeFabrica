@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""FiPy Newton drivers: steady pseudo-time relaxation and physical time steps.
+"""FiPy Newton driver for steady pseudo-time relaxation.
 Device equations stay in the examples; FiPy assembles residuals and matrices.
 """
 from __future__ import division, print_function
@@ -137,26 +137,25 @@ def _residual_vector(equation, **kwargs):
         solver=LinearLUSolver(), **kwargs)).copy()
 
 
-def _newton_limits(fields, equations, corrections, correction_equations, dt,
+def _newton_limits(fields, physical_equations, equations, dt,
                    tolerance, damping, max_iterations, equation_tolerances):
     """Validate controls before changing any current or old field values."""
     if (not np.isfinite(dt) or dt <= 0 or not np.isfinite(tolerance) or tolerance <= 0
             or not np.isfinite(damping) or not 0 < damping <= 1
             or not isinstance(max_iterations, (int, np.integer)) or max_iterations < 1):
         raise ValueError('Require finite positive dt/tolerance, 0 < damping <= 1 and positive integer max_iterations')
-    if not fields or not len(fields) == len(equations) == len(fields if corrections is None else corrections) == len(correction_equations):
-        raise ValueError('Fields, physical equations and corrections must have equal nonzero lengths')
+    if not fields or not len(fields) == len(physical_equations) == len(equations):
+        raise ValueError('Fields, physical equations and linearized equations must have equal nonzero lengths')
     limits = np.asarray(equation_tolerances if equation_tolerances is not None else [tolerance]*len(fields))
     if limits.shape != (len(fields),) or np.any(~np.isfinite(limits)) or np.any(limits <= 0):
         raise ValueError('Require one positive finite tolerance per equation')
     return limits
 
-def _solve_coupled(fields, equations, corrections, physical_equations, dt,
+def _solve_coupled(fields, equations, physical_equations, dt,
                    tolerance, limits, damping, max_iterations, linear_solver,
                    update_transport_response, steady=False, min_dt=None,
                    max_dt=None, verbose=False, line_search=True, potential_limit=.08):
-    """Solve increments, or candidate fields when corrections=None; verify physics."""
-    increments = () if corrections is None else corrections
+    """Solve candidate fields, apply their updates, and verify physical residuals."""
     if not isinstance(linear_solver, LinearLUSolver):
         raise ValueError('Newton requires a SciPy LinearLUSolver or MeshOrderedLinearLUSolver')
     block = equations[0]
@@ -165,28 +164,23 @@ def _solve_coupled(fields, equations, corrections, physical_equations, dt,
     if len(equations) > 1:
         # Use FiPy's public ordering API. Algebraic rows have no transient or
         # diffusion term to guide its heuristic, which otherwise uses set order.
-        block(fields if corrections is None else corrections)
+        block(fields)
     history, previous_merit = [], np.inf
     for iteration in range(max_iterations):
         iteration_start = _iteration_clock()
         values = np.array([field.value for field in fields])
-        for correction in increments:
-            correction.setValue(0.)
         if update_transport_response is not None:
             update_transport_response()
         block.sweep(dt=dt, solver=linear_solver, cacheResidual=True)
-        if corrections is None:
-            # Restore the iterate before applying the same damping/line search.
-            deltas = np.asarray([field.value for field in fields]) - values
-            for field, value in zip(fields, values):
-                field.setValue(value)
+        # Convert candidate fields to updates, then restore the current iterate.
+        deltas = np.asarray([field.value for field in fields]) - values
+        for field, value in zip(fields, values):
+            field.setValue(value)
         norms = np.linalg.norm(np.asarray(block.residualVector).reshape(len(fields), -1), axis=1)
         residual = float(sum(norms))
         history.append(residual)
         merit = float(np.max(norms/limits))
         if residual <= tolerance and merit <= 1:
-            for correction in increments:
-                correction.setValue(0.)
             verified = np.asarray([np.linalg.norm(_residual_vector(eq, dt=1e100 if steady else dt))
                                    for eq in physical_equations])
             if sum(verified) <= tolerance and np.all(verified <= limits):
@@ -194,10 +188,8 @@ def _solve_coupled(fields, equations, corrections, physical_equations, dt,
                 return history[-1], iteration, np.asarray(history)
         if not np.isfinite(residual):
             raise RuntimeError('Nonfinite coupled residual')
-        if corrections is not None:
-            deltas = np.asarray([correction.value for correction in corrections])
         if not np.all(np.isfinite(deltas)):
-            raise RuntimeError('Nonfinite coupled correction')
+            raise RuntimeError('Nonfinite coupled field update')
         alpha = damping
         if not steady:
             alpha = min(alpha, potential_limit/max(float(np.max(abs(deltas[0]))), potential_limit))
@@ -237,8 +229,6 @@ def _solve_coupled(fields, equations, corrections, physical_equations, dt,
         if verbose and iteration % 5 == 0:
             print('iteration=%d residual=%.3g dt=%.3g alpha=%.3g time_per_iteration=%.3fs' %
                   (iteration+1, residual, dt, alpha, _iteration_clock()-iteration_start))
-    for correction in increments:
-        correction.setValue(0.)
     raise RuntimeError('Coupled Newton did not converge after %d iterations: dt=%g residual=%g component ratios=%s' % (max_iterations, dt, history[-1], norms/limits))
 
 class LiveExponentialConvectionTerm(ExponentialConvectionTerm):
@@ -281,7 +271,7 @@ def exponential_flux_response(density, gradient, sign, thermal_voltage):
     response = np.where(abs(peclet) < 1e-3, .5*(nleft+nright), response)
     return np.where(peclet > 101, nleft, response)
 
-def solve_newton_coupled(fields, equations, corrections=None, dt=1e-7, max_dt=1e-5,
+def solve_newton_coupled(fields, equations, dt=1e-7, max_dt=1e-5,
                  tolerance=1e-10, damping=.15, sweeps=1, max_steps=2000,
                  enable_ions=True, min_dt=1e-7, verbose=True, physical_equations=None,
                  update_transport_response=None, equation_tolerances=None, linear_solver=None):
@@ -291,18 +281,18 @@ def solve_newton_coupled(fields, equations, corrections=None, dt=1e-7, max_dt=1e
     All supplied fields are solved together. For frozen ions, supply electronic
     fields and their corresponding equations only; silently ignoring rows would
     change the physical system. Physical equations are required for verification.
-    With corrections=None, equations act on fields and include Jacobian-only
+    The linearized equations act on the physical fields and include Jacobian-only
     additions (term + ResidualTerm(equation=term, underRelaxation=-1.)).
     """
     if physical_equations is None:
         raise ValueError('physical_equations are required for coupled convergence verification')
     if (not enable_ions and len(fields) > 3) or sweeps != 1:
         raise ValueError('Coupled mode solves every supplied row in one block sweep')
-    limits = _newton_limits(fields, physical_equations, corrections, equations,
+    limits = _newton_limits(fields, physical_equations, equations,
                             dt, tolerance, damping, max_steps, equation_tolerances)
     if not np.isfinite(min_dt) or not np.isfinite(max_dt) or not 0 < min_dt <= dt <= max_dt:
         raise ValueError('Require 0 < min_dt <= dt <= max_dt, all finite')
-    result, iterations, values = _solve_coupled(fields, equations, corrections,
+    result, iterations, values = _solve_coupled(fields, equations,
         physical_equations, dt, tolerance, limits, damping, max_steps,
         MeshOrderedLinearLUSolver(fields[0].mesh, tolerance=1e-12, iterations=1) if linear_solver is None else linear_solver,
         update_transport_response, steady=True, min_dt=min_dt, max_dt=max_dt,
