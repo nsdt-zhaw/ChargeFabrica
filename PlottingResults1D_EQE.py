@@ -10,11 +10,13 @@ NumberOfSuns = 1.00
 ScalingFactor = 1.00
 
 # Load one ordered snapshot, including legacy per-field files.
-results = load_results(Simulation_folder)
+results = load_results(Simulation_folder, keys=[
+    'JnY', 'JpY', 'PhotonFluxArrayFinal',
+    'PhotonFluxArrayOriginal', 'PhotonFluxArrayOriginalSplit', 'applied_wavelengths'])
 if results['applied_wavelengths'][0] != 0.:
     raise ValueError('The baseline EQE point has not completed yet.')
-Jn_Y = results["ConservativeJnInternal"]
-Jp_Y = results["ConservativeJpInternal"]
+Jn_Y = results["JnY"]
+Jp_Y = results["JpY"]
 JTotal_Y = Jn_Y + Jp_Y
 PhotonFluxMatrix = results["PhotonFluxArrayFinal"]
 PhotonFluxArrayOriginal = results["PhotonFluxArrayOriginal"]
@@ -25,7 +27,7 @@ if os.path.isdir(os.path.join(Simulation_folder, "points")):
 PhotonFluxPerturbation = PhotonFluxMatrix - PhotonFluxArrayOriginal
 applied_wavelengths = results["applied_wavelengths"]
 
-JTotal_Y_mean = -np.mean(JTotal_Y, axis=(1, 2))
+JTotal_Y_mean = -JTotal_Y[:, -1].mean(axis=1)
 Jsc1Sun = JTotal_Y_mean[0]
 
 print("Jsc1Sun: ", Jsc1Sun, "A/m^2")

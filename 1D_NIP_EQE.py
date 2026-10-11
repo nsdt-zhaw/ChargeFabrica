@@ -4,7 +4,7 @@
 import os
 os.environ["OMP_NUM_THREADS"] = "1" #Really important! Pysparse doesnt benefit from multithreading.
 import numpy as np
-from mark_interface_file import mark_interfaces, mark_interfaces_mixed
+from mark_interface_file import mark_interfaces_mixed
 from calculate_absorption import calculate_absorption_above_bandgap
 from fipy import TransientTerm, DiffusionTerm, ImplicitSourceTerm
 import fipy
@@ -14,14 +14,13 @@ from newton_solver import LiveExponentialConvectionTerm as ExponentialConvection
 from newton_solver import IndependentResidualTerm as ResidualTerm, fresh_equation
 from scipy.ndimage import zoom
 from joblib import Parallel, delayed
-import multiprocessing
 from functools import partial
 from material_maps import Semiconductors, map_semiconductor_property, map_electrode_property, name_to_code_SC, name_to_code_EL
 from BoundaryConditions import ohmic
 from constantsfile import q, epsilon_0, D
 from LoadSolarSpectrum import SolarSpectrumWavelength, SolarSpectrumIrradiance
 from workflow_utils import run_sweep, prepare_sweep_output, solve_and_save_point
-from electrical_numerics import device_field, as_cell_array, cell_variable, conservative_internal_face_currents, srh_rate_and_carrier_derivatives, terminal_current_densities
+from electrical_numerics import device_field, cell_variable, fitted_face_currents, face_current_arrays, srh_rate_and_carrier_derivatives
 
 Gold_ID = name_to_code_EL["Gold"]
 Spiro_ID = name_to_code_SC["Spiro"]
@@ -118,8 +117,7 @@ def solve_for_wavelength(voltage, n_values, p_values, a_values, c_values, phi_va
     philocal, nlocal, plocal, alocal, clocal = [cell_variable(mesh, name, value, True) for name, value in zip(state_names, state_values)]
 
     gen_rate = cell_variable(mesh, "generation minus recombination rate")
-    GenRate_values_default = GenRate_values_default.flatten()
-    gen_rate.setValue(GenRate_values_default)
+    gen_rate.setValue(GenRate_values_default.ravel())
 
     for boundary, n_contact, p_contact, phi_contact in (
             (mesh.facesTop, nTop, pTop, Vbi + voltage),
@@ -194,23 +192,19 @@ def solve_for_wavelength(voltage, n_values, p_values, a_values, c_values, phi_va
 
     # Here the electron and hole quasi-fermi levels are calculated
     # Legacy output names are paired directly with their physical fields.
-    result = dict((name, as_cell_array(field, DeviceArchitecture.shape)) for name, field in (
+    result = dict((name, field.value.reshape(DeviceArchitecture.shape)) for name, field in (
         ('NMatrix', nlocal), ('PMatrix', plocal), ('RecombinationMatrix', Recombination_Combined),
         ('GenValues_Matrix', gen_rate), ('PotentialMatrix', philocal), ('ChiMatrix', ChiCell), ('EgMatrix', EgCell),
         ('psinvarmatrix', philocal + ChiCell - D * (numerix.log(nlocal) - LogNcCell)),
         ('psipvarmatrix', philocal + ChiCell + EgCell + D * (numerix.log(plocal) - LogNvCell)),
         ('Recombination_Bimolecular_EQMatrix', Recombination_Bimolecular_EQ)))
-    jn, jp = conservative_internal_face_currents(
-        *[as_cell_array(field, DeviceArchitecture.shape) for field in
-          (nlocal, plocal, philocal, ChiCell, EgCell, LogNcCell, LogNvCell, nmob, pmob)], axis=0, spacing=dy, thermal_voltage=D)
-    bottom_current, top_current, terminal_current = terminal_current_densities(jn, jp)
     result.update(
                   Efield_matrix=(-philocal.grad.globalValue).reshape((mesh.dim,) + DeviceArchitecture.shape),
-                  n=nlocal.globalValue.copy(), p=plocal.globalValue.copy(), phi=philocal.globalValue.copy(),
-                  AnionDensityMatrix=alocal.globalValue.copy(), CationDensityMatrix=clocal.globalValue.copy(),
-                  ResidualMatrix=residual, SweepCounterMatrix=SweepCounter, ResidualArray=residualarray, ConservativeJnInternal=jn,
-                  ConservativeJpInternal=jp, TerminalCurrentDensity=terminal_current, BottomTerminalCurrentDensity=bottom_current,
-                  TopTerminalCurrentDensity=top_current, Converged=bool(residual <= desired_residual))
+                  AnionDensityMatrix=alocal.value.reshape(DeviceArchitecture.shape), CationDensityMatrix=clocal.value.reshape(DeviceArchitecture.shape),
+                  ResidualMatrix=residual, SweepCounterMatrix=SweepCounter, ResidualArray=residualarray[:SweepCounter],
+                  Converged=bool(residual <= desired_residual))
+    result.update(face_current_arrays(*fitted_face_currents(
+        nlocal, plocal, electron_drift, hole_drift, nmob, pmob, D)))
     return result
 
 def simulate_device(output_dir):
@@ -294,8 +288,8 @@ def simulate_device(output_dir):
             for offset, GenRateEQE in enumerate(GenerationArray))
 
         # Continue from the last wavelength result in the batch.
-        state = tuple(chunk_results[-1][key] for key in
-                      ('n', 'p', 'AnionDensityMatrix', 'CationDensityMatrix', 'phi'))
+        state = tuple(chunk_results[-1][key].ravel() for key in
+                      ('NMatrix', 'PMatrix', 'AnionDensityMatrix', 'CationDensityMatrix', 'PotentialMatrix'))
     return chunk_results
 
 def main_workflow():

@@ -5,7 +5,9 @@ import matplotlib.pyplot as plt
 #Plotting code for Spatial Collection Efficiency (SCE) calculation from 1D drift-diffusion simulation data
 Simulation_folder = "./Outputs/1D_NIP_SCE_Example/VoltageSweep/"
 
-results = load_results(Simulation_folder)
+results = load_results(Simulation_folder, keys=[
+    'JnY', 'JpY', 'GenValues_Matrix',
+    'excitation_indices'])
 if results['excitation_indices'][0] != -1:
     raise ValueError('The baseline SCE point has not completed yet.')
 
@@ -14,17 +16,17 @@ GenValues_Matrix_SCE = results["GenValues_Matrix"][1:]
 
 Position_SCE = results["excitation_indices"][1:1 + GenValues_Matrix_SCE.shape[0]]
 
-Jn_Matrix = results["ConservativeJnInternal"]
-Jp_Matrix = results["ConservativeJpInternal"]
+Jn_Matrix = results["JnY"]
+Jp_Matrix = results["JpY"]
 JTotal_Y = (Jn_Matrix + Jp_Matrix)
 
 JTotal_Y_default = JTotal_Y[0]
 JTotal_Y_SCE = JTotal_Y[1:]
 
-JTotal_Y_mean_default = np.median(JTotal_Y, axis=(1, 2))
+JTotal_Y_mean_default = JTotal_Y[:, -1].mean(axis=1)
 JTotal_Y_mean_default_Jsc = JTotal_Y_mean_default[0]
 
-JTotal_Y_mean_SCE = np.median(JTotal_Y_SCE, axis=(1, 2))
+JTotal_Y_mean_SCE = JTotal_Y_SCE[:, -1].mean(axis=1)
 
 DeltaJsc = JTotal_Y_mean_SCE - JTotal_Y_mean_default_Jsc #Should be negative due to extra generation in SCE
 

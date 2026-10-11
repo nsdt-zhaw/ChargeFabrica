@@ -8,7 +8,14 @@ from matplotlib.widgets import Slider
 from scipy.interpolate import interp1d
 
 Simulation_folder = "./Outputs/2D_HTL_Free_Carbon_Device_IONS_Newton_Example/VoltageSweep/"
-results = load_results(Simulation_folder)
+results = load_results(Simulation_folder, keys=[
+    'AnionDensityMatrix', 'CationDensityMatrix', 'ChiMatrix',
+    'JnY', 'JpY', 'Efield_matrix',
+    'EgMatrix', 'GenValues_Matrix', 'NMatrix',
+    'PMatrix', 'PotentialMatrix', 'RecombinationMatrix',
+    'Recombination_Bimolecular_EQMatrix', 'ResidualArray', 'ResidualMatrix',
+    'SweepCounterMatrix', 'applied_voltages', 'psinvarmatrix',
+    'psipvarmatrix'])
 
 NumberOfSuns = 1.00
 
@@ -30,11 +37,11 @@ RecombinationMatrix = results["RecombinationMatrix"]
 RadiativeRecombinationMatrix = results["Recombination_Bimolecular_EQMatrix"]
 PMatrix = results["PMatrix"]
 NMatrix = results["NMatrix"]
-Jn_Matrix = results["ConservativeJnInternal"]
-Jp_Matrix = results["ConservativeJpInternal"]
+Jn_Matrix = results["JnY"][:, 1:-1]
+Jp_Matrix = results["JpY"][:, 1:-1]
 JTotal_Y = (Jn_Matrix + Jp_Matrix)
 
-JTotal_Y_mean = np.mean(JTotal_Y, axis=(1, 2))
+JTotal_Y_mean = (results["JnY"][:, -1] + results["JpY"][:, -1]).mean(axis=1)
 VocLocation = np.unravel_index(np.argmin(np.abs(JTotal_Y_mean)), JTotal_Y_mean.shape)
 
 PLYield = 100*RadiativeRecombinationMatrix / (GenerationMatrix+1)
@@ -57,8 +64,8 @@ applied_voltages = results["applied_voltages"]
 
 #Create a plot where residualarray over time is shown for different applied voltages
 fig3, ax4 = plt.subplots()
-for i in range(ResidualArray.shape[0]):
-    ax4.plot(ResidualArray[i,:], label="V={:.2f}V".format(applied_voltages[i]))
+for i in range(len(ResidualArray)):
+    ax4.plot(ResidualArray[i], label="V={:.2f}V".format(applied_voltages[i]))
 ax4.set_yscale("log")
 ax4.set_xlabel("Time Step")
 ax4.set_ylabel("Residual")

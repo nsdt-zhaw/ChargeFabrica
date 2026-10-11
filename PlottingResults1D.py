@@ -3,26 +3,31 @@ from workflow_utils import load_results
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
-from matplotlib.colors import Normalize
 from matplotlib.widgets import Slider
 from scipy.interpolate import interp1d
-from plotting_utils import median_filter_1d
 
 # Load data
 Simulation_folder = "./Outputs/1D_IONS_NIP_Example/VoltageSweep/"
-results = load_results(Simulation_folder)
+results = load_results(Simulation_folder, keys=[
+    'AnionDensityMatrix', 'CationDensityMatrix', 'ChiMatrix',
+    'JnY', 'JpY', 'Efield_matrix',
+    'EgMatrix', 'GenValues_Matrix', 'NMatrix',
+    'PMatrix', 'PotentialMatrix', 'RecombinationMatrix',
+    'Recombination_Bimolecular_EQMatrix', 'ResidualArray', 'ResidualMatrix',
+    'SweepCounterMatrix', 'applied_voltages', 'psinvarmatrix',
+    'psipvarmatrix'])
 NumberOfSuns = 1.00
 
 GenerationMatrix = results["GenValues_Matrix"][:]
 RecombinationMatrix = results["RecombinationMatrix"][:]
-PMatrix = results["p"][:]
-NMatrix = results["n"][:]
+PMatrix = results["PMatrix"][:]
+NMatrix = results["NMatrix"][:]
 
-Jn_Matrix = results["ConservativeJnInternal"]
-Jp_Matrix = results["ConservativeJpInternal"]
+Jn_Matrix = results["JnY"][:, 1:-1]
+Jp_Matrix = results["JpY"][:, 1:-1]
 
 JTotal_Y = (Jn_Matrix + Jp_Matrix)
-PotentialMatrix = results["phi"][:]
+PotentialMatrix = results["PotentialMatrix"][:]
 EField_matrix = -results["Efield_matrix"][:,1,:,:]
 
 applied_voltages = results["applied_voltages"][:]
@@ -39,8 +44,8 @@ SweepCounterMatrix = results["SweepCounterMatrix"][:]
 
 #Create a plot where residualarray over time is shown for different applied voltages
 fig3, ax4 = plt.subplots()
-for i in range(ResidualArray.shape[0]):
-    ax4.plot(ResidualArray[i,:], label="V={:.2f}V".format(applied_voltages[i]))
+for i in range(len(ResidualArray)):
+    ax4.plot(ResidualArray[i], label="V={:.2f}V".format(applied_voltages[i]))
 ax4.set_yscale("log")
 ax4.set_xlabel("Time Step")
 ax4.set_ylabel("Residual")
@@ -54,7 +59,7 @@ AnionDensityMatrix = results["AnionDensityMatrix"][:]
 CationDensityMatrix = results["CationDensityMatrix"][:]
 
 # Initial calculations
-JTotal_Y_mean = np.mean(JTotal_Y, axis=(1, 2))
+JTotal_Y_mean = (results["JnY"][:, -1] + results["JpY"][:, -1]).mean(axis=1)
 
 titles = ['EField_matrix', 'PMatrix', 'Generation Rate', 'JTotal_Y', 'PotentialMatrix', 'NMatrix', 'RecombinationMatrix', "Joule Heating", "Anion Density", "Cation Density"]
 print("JTotal_Y_mean shape: ", JTotal_Y_mean.shape)
@@ -101,7 +106,6 @@ if len(applied_voltages) > 3 and applied_voltages.min() <= 0 <= applied_voltages
     ax3.set_yscale("log")
     plt.show(block=False)
 
-PotentialMatrix = np.expand_dims(PotentialMatrix, axis=2)
 
 titles = ['EField Strength (V/m)', 'Generation Rate (1/$\mathrm{m^3}$)', 'Potential (V)', 'Recombination (1/$\mathrm{m^3}$)', 'PLYield (-)']
 data_matrices = [EField_matrix, GenerationMatrix, PotentialMatrix, RecombinationMatrix, PLYield]

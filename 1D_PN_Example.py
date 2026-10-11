@@ -14,9 +14,8 @@ import multiprocessing
 from functools import partial
 from material_maps import map_semiconductor_property, name_to_code_SC
 from constantsfile import q, epsilon_0, D
-from LoadSolarSpectrum import SolarSpectrumWavelength, SolarSpectrumIrradiance
 from workflow_utils import run_sweep, prepare_voltage_output, solve_and_save_voltage
-from electrical_numerics import device_field, as_cell_array, cell_variable, conservative_internal_face_currents, terminal_current_densities
+from electrical_numerics import device_field, cell_variable, fitted_face_currents, face_current_arrays
 
 Si_NaDoping_ID = name_to_code_SC["Si_NaDoping"]
 Si_NdDoping_ID = name_to_code_SC["Si_NdDoping"]
@@ -60,7 +59,6 @@ LogNcCell, LogNvCell = [make_field(prop, logarithm=True) for prop in ('Nc', 'Nv'
 anionmob, cationmob, NdCell, NaCell = [make_field(prop, smoothing=0.) for prop in ('anionmob', 'cationmob', 'Nd', 'Na')]
 Recombination_Langevin_Cell, Recombination_Bimolecular_Cell = [make_field(prop, smoothing=0.) for prop in ('Recombination_Langevin', 'Recombination_Bimolecular')]
 a_initial_values, c_initial_values = [map_semiconductor_property(DeviceArchitecture, prop) for prop in ('a_initial_level', 'c_initial_level')]
-GenRate_values_default = GenRate_values_default.flatten()
 gen_rate = make_field('Generation Rate', GenRate_values_default, smoothing=0.)
 
 niPS = np.sqrt(Nc * Nv * np.exp(-EgCell.value / D))
@@ -104,7 +102,7 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     eqp = (0.00 == -TransientTerm(coeff=q, var=plocal) + DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=plocal) + ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * hole_drift, var=plocal) + q*gen_rate)
     eqa = (0.00 == -TransientTerm(coeff=q, var=alocal) + DiffusionTerm(coeff=q * D * anionmob.harmonicFaceValue, var=alocal) - ExponentialConvectionTerm(coeff=q * anionmob.harmonicFaceValue * anion_drift, var=alocal))
     eqc = (0.00 == -TransientTerm(coeff=q, var=clocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=clocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * cation_drift, var=clocal))
-    eqpoisson = (0.00 == -TransientTerm(var=philocal) + DiffusionTerm(coeff=epsilon, var=philocal) + (q/epsilon_0) * (plocal - nlocal + clocal - alocal + NdCell - NaCell))
+    eqpoisson = (TransientTerm(var=philocal) == DiffusionTerm(coeff=epsilon, var=philocal) + (q/epsilon_0) * (plocal - nlocal + clocal - alocal + NdCell - NaCell))
 
     # Shared iteration; device physics and equations remain above.
     residual, SweepCounter, residualarray = solve_gummel(
@@ -116,23 +114,18 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
     # Here the electron and hole quasi-fermi levels are calculated
     # Legacy output names are paired directly with their physical fields.
-    result = dict((name, as_cell_array(field, DeviceArchitecture.shape)) for name, field in (
+    result = dict((name, field.value.reshape(DeviceArchitecture.shape)) for name, field in (
         ('NMatrix', nlocal), ('PMatrix', plocal), ('RecombinationMatrix', Recombination_Combined),
         ('GenValues_Matrix', gen_rate), ('PotentialMatrix', philocal), ('ChiMatrix', ChiCell), ('EgMatrix', EgCell),
         ('psinvarmatrix', philocal + ChiCell - D * (numerix.log(nlocal) - LogNcCell)),
         ('psipvarmatrix', philocal + ChiCell + EgCell + D * (numerix.log(plocal) - LogNvCell)),
         ('Recombination_Bimolecular_EQMatrix', Recombination_Bimolecular_EQ)))
-    jn, jp = conservative_internal_face_currents(
-        *[as_cell_array(field, DeviceArchitecture.shape) for field in
-          (nlocal, plocal, philocal, ChiCell, EgCell, LogNcCell, LogNvCell, nmob, pmob)], axis=0, spacing=dy, thermal_voltage=D)
-    bottom_current, top_current, terminal_current = terminal_current_densities(jn, jp)
     result.update(
                   Efield_matrix=(-philocal.grad.globalValue).reshape((mesh.dim,) + DeviceArchitecture.shape),
-                  n=nlocal.globalValue.copy(), p=plocal.globalValue.copy(), phi=philocal.globalValue.copy(),
-                  AnionDensityMatrix=alocal.globalValue.copy(), CationDensityMatrix=clocal.globalValue.copy(),
-                  ResidualMatrix=residual, SweepCounterMatrix=SweepCounter, ResidualArray=residualarray, ConservativeJnInternal=jn,
-                  ConservativeJpInternal=jp, TerminalCurrentDensity=terminal_current, BottomTerminalCurrentDensity=bottom_current,
-                  TopTerminalCurrentDensity=top_current)
+                  AnionDensityMatrix=alocal.value.reshape(DeviceArchitecture.shape), CationDensityMatrix=clocal.value.reshape(DeviceArchitecture.shape),
+                  ResidualMatrix=residual, SweepCounterMatrix=SweepCounter, ResidualArray=residualarray[:SweepCounter])
+    result.update(face_current_arrays(*fitted_face_currents(
+        nlocal, plocal, electron_drift, hole_drift, nmob, pmob, D)))
     return result
 
 def simulate_device(output_dir):
@@ -151,8 +144,8 @@ def simulate_device(output_dir):
 
         chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(delayed(solve_and_save_voltage)(solve_for_voltage, output_dir, start + offset, voltage, *state) for offset, voltage in enumerate(chunk_voltages))
 
-        state = tuple(chunk_results[-1][key] for key in
-                      ('n', 'p', 'AnionDensityMatrix', 'CationDensityMatrix', 'phi'))
+        state = tuple(chunk_results[-1][key].ravel() for key in
+                      ('NMatrix', 'PMatrix', 'AnionDensityMatrix', 'CationDensityMatrix', 'PotentialMatrix'))
     return chunk_results
 
 def main_workflow():

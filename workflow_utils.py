@@ -79,9 +79,14 @@ def load_results(output_dir, keys=None):
                 for key in keys:
                     source = coordinates.get(key, key)
                     values.setdefault(key, []).append(point[source])
-        return dict((key, np.asarray(value)) for key, value in values.items())
+        return dict((key, value if key == 'ResidualArray' else np.asarray(value)) for key, value in values.items())
     if keys is None:
         keys = [os.path.splitext(os.path.basename(path))[0]
                 for path in glob.glob(os.path.join(output_dir, "*.npy"))]
     return dict((key, np.load(os.path.join(output_dir, key + ".npy")))
                 for key in keys)
+
+
+def load_voltage_points(output_dir, keys):
+    """Load selected voltage fields using the shared snapshot reader."""
+    return load_results(output_dir, keys)

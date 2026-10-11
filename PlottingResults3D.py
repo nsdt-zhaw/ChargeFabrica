@@ -9,7 +9,13 @@ from scipy.interpolate import interp1d
 import copy
 
 Simulation_folder = "./Outputs/3D_HTL_Free_Carbon_Device_IONS/VoltageSweep/"
-results = load_results(Simulation_folder)
+results = load_results(Simulation_folder, keys=[
+    'AnionDensityMatrix', 'CationDensityMatrix', 'ChiMatrix',
+    'JnZ', 'JpZ', 'Efield_matrix',
+    'EgMatrix', 'GenValues_Matrix', 'NMatrix',
+    'PMatrix', 'PotentialMatrix', 'RecombinationMatrix',
+    'Recombination_Bimolecular_EQMatrix', 'ResidualMatrix', 'SweepCounterMatrix',
+    'applied_voltages', 'psinvarmatrix', 'psipvarmatrix'])
 NumberOfSuns = 1.00
 
 class PercentileNormalizer(Normalize):
@@ -33,8 +39,8 @@ NMatrix = results["NMatrix"]                          # (V, Y, X, Z)
 NMatrixShapeFull = NMatrix.shape                                              # (V, Y, X, Z)
 
 # Load conservative currents on internal faces (voltage, y-face, x, z).
-Jn_Matrix = results["ConservativeJnInternal"]
-Jp_Matrix = results["ConservativeJpInternal"]
+Jn_Matrix = results["JnZ"][:, 1:-1]
+Jp_Matrix = results["JpZ"][:, 1:-1]
 
 #Total y-component
 JTotal_Y = (Jn_Matrix + Jp_Matrix)  # (V, Y, X, Z)
@@ -47,7 +53,7 @@ plt.title("Mean JTotal_Y at V=0, z=0")
 plt.show()
 
 #For JV analysis (initially at z=0)
-JTotal_Y_mean = np.mean(JTotal_Y[:, :, :, 0], axis=(1, 2))
+JTotal_Y_mean = (results["JnZ"][:, -1, :, 0] + results["JpZ"][:, -1, :, 0]).mean(axis=1)
 VocLocation = np.unravel_index(np.argmin(np.abs(JTotal_Y_mean)), JTotal_Y_mean.shape)
 
 #PL yield

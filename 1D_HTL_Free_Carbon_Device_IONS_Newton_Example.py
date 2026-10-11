@@ -6,7 +6,7 @@
 import os
 os.environ["OMP_NUM_THREADS"] = "1" # Avoid thread oversubscription across voltage workers.
 import numpy as np
-from mark_interface_file import mark_interfaces, mark_interfaces_mixed
+from mark_interface_file import mark_interfaces_mixed
 from calculate_absorption import calculate_absorption_above_bandgap
 from fipy import TransientTerm, DiffusionTerm, ImplicitSourceTerm
 import fipy
@@ -23,7 +23,7 @@ from BoundaryConditions import ohmic
 from constantsfile import q, epsilon_0, D
 from LoadSolarSpectrum import SolarSpectrumWavelength, SolarSpectrumIrradiance
 from workflow_utils import run_sweep, prepare_voltage_output, solve_and_save_voltage
-from electrical_numerics import device_field, as_cell_array, cell_variable, conservative_internal_face_currents, srh_rate_and_carrier_derivatives, terminal_current_densities
+from electrical_numerics import device_field, cell_variable, fitted_face_currents, face_current_arrays, srh_rate_and_carrier_derivatives
 
 Carbon_ID = name_to_code_EL["Carbon"]
 PS_ID = name_to_code_SC["PS"]
@@ -97,7 +97,6 @@ Recombination_Langevin_Cell, Recombination_Bimolecular_Cell = [make_field(prop, 
 a_initial_values, c_initial_values = [map_semiconductor_property(DeviceArchitecture, prop) for prop in ('a_initial_level', 'c_initial_level')]
 Recombination_Interfacial_SRH_Cell = make_field('interface SRH zone', SRH_Interfacial_Recombination_Zone)
 Recombination_Bulk_SRH_Cell = make_field('bulk SRH zone', SRH_Bulk_Recombination_Zone)
-GenRate_values_default = GenRate_values_default.flatten()
 gen_rate = make_field('Generation Rate', GenRate_values_default, smoothing=0.)
 
 nTop, pTop = ohmic(TopLocationSC, TopElectrode)
@@ -206,23 +205,18 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
 
     # Here the electron and hole quasi-fermi levels are calculated
     # Legacy output names are paired directly with their physical fields.
-    result = dict((name, as_cell_array(field, DeviceArchitecture.shape)) for name, field in (
+    result = dict((name, field.value.reshape(DeviceArchitecture.shape)) for name, field in (
         ('NMatrix', nlocal), ('PMatrix', plocal), ('RecombinationMatrix', Recombination_Combined),
         ('GenValues_Matrix', gen_rate), ('PotentialMatrix', philocal), ('ChiMatrix', ChiCell), ('EgMatrix', EgCell),
         ('psinvarmatrix', philocal + ChiCell - D * (numerix.log(nlocal) - LogNcCell)),
         ('psipvarmatrix', philocal + ChiCell + EgCell + D * (numerix.log(plocal) - LogNvCell)),
         ('Recombination_Bimolecular_EQMatrix', Recombination_Bimolecular_EQ)))
-    jn, jp = conservative_internal_face_currents(
-        *[as_cell_array(field, DeviceArchitecture.shape) for field in
-          (nlocal, plocal, philocal, ChiCell, EgCell, LogNcCell, LogNvCell, nmob, pmob)], axis=0, spacing=dy, thermal_voltage=D)
-    bottom_current, top_current, terminal_current = terminal_current_densities(jn, jp)
     result.update(
                   Efield_matrix=(-philocal.grad.globalValue).reshape((mesh.dim,) + DeviceArchitecture.shape),
-                  n=nlocal.globalValue.copy(), p=plocal.globalValue.copy(), phi=philocal.globalValue.copy(),
-                  AnionDensityMatrix=alocal.globalValue.copy(), CationDensityMatrix=clocal.globalValue.copy(),
-                  ResidualMatrix=residual, SweepCounterMatrix=SweepCounter, ResidualArray=residualarray, ConservativeJnInternal=jn,
-                  ConservativeJpInternal=jp, TerminalCurrentDensity=terminal_current, BottomTerminalCurrentDensity=bottom_current,
-                  TopTerminalCurrentDensity=top_current, Converged=bool(residual <= desired_residual))
+                  AnionDensityMatrix=alocal.value.reshape(DeviceArchitecture.shape), CationDensityMatrix=clocal.value.reshape(DeviceArchitecture.shape),
+                  ResidualMatrix=residual, SweepCounterMatrix=SweepCounter, ResidualArray=residualarray[:SweepCounter],
+                  Converged=bool(residual <= desired_residual))
+    result.update(face_current_arrays(*fitted_face_currents(nlocal, plocal, electron_drift, hole_drift, nmob, pmob, D)))
     return result
 
 def simulate_device(output_dir):
@@ -241,8 +235,8 @@ def simulate_device(output_dir):
 
         chunk_results = Parallel(n_jobs=chunk_size, backend="multiprocessing")(delayed(solve_and_save_voltage)(solve_for_voltage, output_dir, start + offset, voltage, *state) for offset, voltage in enumerate(chunk_voltages))
 
-        state = tuple(chunk_results[-1][key] for key in
-                      ('n', 'p', 'AnionDensityMatrix', 'CationDensityMatrix', 'phi'))
+        state = tuple(chunk_results[-1][key].ravel() for key in
+                      ('NMatrix', 'PMatrix', 'AnionDensityMatrix', 'CationDensityMatrix', 'PotentialMatrix'))
     return chunk_results
 
 def main_workflow():
