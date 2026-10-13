@@ -1,104 +1,56 @@
-from scipy.interpolate import interp1d
-from scipy.constants import c, h
+"""Shared Beer-Lambert optical generation and lattice thermalisation."""
 import numpy as np
+from scipy.constants import Boltzmann, c, h, electron_volt
+from scipy.interpolate import interp1d
 
-def calculate_absorption_above_bandgap(SolarSpectrumWavelength,SolarSpectrumIrradiance,AbsorptionWavelength,AbsorptionCoefficient, DeviceArchitecture,PixelWidth,bandgap_eV):
 
-    # Constants
-    nm_to_m = 1e-9
-    eV_to_J = 1.60218e-19
-    kT = 4.11e-21  # ~25 C
+def calculate_absorption_above_bandgap(SolarSpectrumWavelength, SolarSpectrumIrradiance,
+                                      AbsorptionWavelength, AbsorptionCoefficient,
+                                      DeviceArchitecture, PixelWidth, bandgap_eV,
+                                      temperature=298.15):
+    """Return generation, thermalisation, outgoing photon flux and optical power.
 
-    # Ensure arrays
-    SolarSpectrumWavelength = np.asarray(SolarSpectrumWavelength)
-    SolarSpectrumIrradiance = np.asarray(SolarSpectrumIrradiance)
-    AbsorptionWavelength = np.asarray(AbsorptionWavelength)
-    AbsorptionCoefficient = np.asarray(AbsorptionCoefficient)
-    DeviceArchitecture = np.asarray(DeviceArchitecture)
+    Illuminate the last row of a (depth, lateral...) nonnegative absorption
+    mask, not a material-ID array. PixelWidth is depth-cell thickness in m;
+    wavelengths are nm and absorption coefficients are 1/m. Spectral inputs
+    use the repository's implicit 1 nm bins and are summed without new weights.
+    Temperature is in K, either scalar or broadcastable to the device shape.
 
-    if DeviceArchitecture.ndim < 2:
-        raise ValueError("DeviceArchitecture must have at least 2 dimensions: (depth, lateral...).")
-
-    n_lambda = SolarSpectrumWavelength.shape[0]
-    spatial_shape = DeviceArchitecture.shape  # (Nz, ...)
-
-    # Interpolate absorption coefficient to solar spectrum grid
-    interp_abs_coeff = interp1d(
-        AbsorptionWavelength, AbsorptionCoefficient,
-        kind='linear', bounds_error=False, fill_value="extrapolate"
-    )
-    absorption_coeff_at_solar_wavelengths = interp_abs_coeff(SolarSpectrumWavelength)  # shape (n_lambda,)
-
-    # Photon energy at each wavelength
-    photon_energy = (h * c) / (SolarSpectrumWavelength * nm_to_m)  # J
-
-    # Indices
-    Eg = bandgap_eV * eV_to_J
-    above_bandgap = np.where(photon_energy >= Eg)[0]
-    all_energy = np.where(photon_energy > 0)[0]
-
-    # Photon flux (spectral)
-    photon_flux_above = SolarSpectrumIrradiance[above_bandgap] / photon_energy[above_bandgap]  # (n_above,)
-    photon_flux_total = SolarSpectrumIrradiance / photon_energy  # (n_lambda,)
-
-    # Allocate hyperspectral arrays: (n_lambda, Nz, ...)
-    out_shape = (n_lambda,) + spatial_shape
-    PhotonFluxArray = np.zeros(out_shape)
-    GenerationArray = np.zeros(out_shape)
-    ThermalisationArray = np.zeros(out_shape)
-    PhotonEnergyArray = np.zeros(out_shape)
-    PhotonFluxArrayTotal = np.zeros(out_shape)
-
-    # Bottom boundary (last depth slice = -1)
-    for k, idx in enumerate(above_bandgap):
-        mu = absorption_coeff_at_solar_wavelengths[idx]
-        attenuation_bottom = np.exp(-DeviceArchitecture[-1, ...] * mu * PixelWidth)
-        # Flux that emerges from bottom slice (per unit length)
-        PhotonFluxArray[idx, -1, ...] = photon_flux_above[k] * attenuation_bottom / PixelWidth
-        # Absorbed in bottom slice
-        GenerationArray[idx, -1, ...] = (photon_flux_above[k] * (1.0 - attenuation_bottom)) * DeviceArchitecture[-1, ...] / PixelWidth
-        # Energy carried (use the per-length flux at bottom)
-        PhotonEnergyArray[idx, -1, ...] = PhotonFluxArray[idx, -1, ...] * photon_energy[idx] * PixelWidth
-
-    # Initialize total photon flux at bottom for all energies
-    for idx in all_energy:
-        PhotonFluxArrayTotal[idx, -1, ...] = photon_flux_total[idx] / PixelWidth
-
-    # Copy total flux upward (no attenuation yet; will be applied for above-bandgap wavelengths below)
-    Nz = spatial_shape[0]
-    for row in range(Nz - 2, -1, -1):
-        for idx in all_energy:
-            PhotonFluxArrayTotal[idx, row, ...] = PhotonFluxArrayTotal[idx, row + 1, ...]
-
-    # Propagate from bottom to top for above-bandgap wavelengths
-    for row in range(Nz - 2, -1, -1):
-        layer = DeviceArchitecture[row, ...]
-        for idx in above_bandgap:
-            mu = absorption_coeff_at_solar_wavelengths[idx]
-            attenuation = np.exp(-layer * mu * PixelWidth)
-            # Flux that reaches the top of this layer
-            PhotonFluxArray[idx, row, ...] = PhotonFluxArray[idx, row + 1, ...] * attenuation
-            # Total flux used for energy tally (same attenuation for above-bandgap)
-            PhotonFluxArrayTotal[idx, row, ...] = PhotonFluxArrayTotal[idx, row + 1, ...] * attenuation
-            # Absorption in this layer
-            GenerationArray[idx, row, ...] = PhotonFluxArray[idx, row + 1, ...] - PhotonFluxArray[idx, row, ...]
-            # Thermalisation (excess energy above Eg minus ~3kT)
-            ThermalisationArray[idx, row, ...] = GenerationArray[idx, row, ...] * (photon_energy[idx] - Eg - 3.0 * kT)
-
-    # Energy carried per layer (using total flux in the layer above)
-    for row in range(Nz - 2, -1, -1):
-        for idx in all_energy:
-            PhotonEnergyArray[idx, row, ...] = PhotonFluxArrayTotal[idx, row + 1, ...] * photon_energy[idx] * PixelWidth
-
-    # Collapse spectral axis
-    ThermalisationArray = -np.sum(ThermalisationArray, axis=0)
-    GenerationArray = np.sum(GenerationArray, axis=0)
-    PhotonFluxArray = np.sum(PhotonFluxArray, axis=0)
-    PhotonEnergyArray = np.sum(PhotonEnergyArray, axis=0)
-
-    # Shapes returned:
-    #   GenerationArray: (Nz, ...)
-    #   ThermalisationArray: (Nz, ...)
-    #   PhotonFluxArray: (Nz, ...)
-    #   PhotonEnergyArray: (Nz, ...)
-    return GenerationArray, ThermalisationArray, PhotonFluxArray, PhotonEnergyArray
+    All four outputs have the device shape. Generation is in 1/(m3 s),
+    thermalisation in W/m3, outgoing above-bandgap photon flux divided by
+    PixelWidth in 1/(m3 s), and outgoing all-spectrum optical power in W/m2.
+    Exit faces lie toward decreasing depth indices. Heat is absorbed power
+    minus G * (Eg + 3 kT); it can be negative close to the band edge.
+    Below-bandgap light passes through unchanged. Negative interpolated
+    absorption coefficients are clipped to zero. One wavelength is accumulated
+    at a time, avoiding wavelength-by-device arrays.
+    """
+    wavelength, irradiance = SolarSpectrumWavelength, SolarSpectrumIrradiance
+    absorption_wavelength, absorption_coefficient = AbsorptionWavelength, AbsorptionCoefficient
+    spacing = PixelWidth
+    mask = np.asarray(DeviceArchitecture, dtype=float)
+    temperature = np.broadcast_to(np.asarray(temperature, dtype=float), mask.shape)
+    wavelength = np.asarray(wavelength, dtype=float)
+    irradiance = np.asarray(irradiance, dtype=float)
+    alpha = interp1d(absorption_wavelength, absorption_coefficient,
+                     bounds_error=False, fill_value="extrapolate")(wavelength)
+    if (mask.ndim < 2 or spacing <= 0 or np.any(temperature <= 0) or np.any(~np.isfinite(temperature))
+            or np.any(mask < 0) or np.any(~np.isfinite(alpha))):
+        raise ValueError("Require a nonnegative device mask and positive spacing/temperature")
+    generation, absorbed_power, photon_flux, transmitted = [np.zeros_like(mask) for _ in range(4)]
+    # Optical depth between the illuminated surface and each cell's entrance.
+    depth = np.cumsum(mask[::-1], axis=0)[::-1] - mask
+    for energy, intensity, coefficient in zip(h*c/(wavelength*1e-9), irradiance, alpha):
+        optical_depth = max(float(coefficient), 0.) * spacing
+        if energy < bandgap_eV * electron_volt:
+            transmitted += intensity
+            continue
+        incoming = intensity * np.exp(-optical_depth * depth)
+        absorbed = incoming * (-np.expm1(-optical_depth * mask))
+        outgoing = incoming - absorbed
+        generation += absorbed / (energy * spacing)
+        absorbed_power += absorbed / spacing
+        photon_flux += outgoing / (energy * spacing)
+        transmitted += outgoing
+    heat = absorbed_power - generation * (bandgap_eV * electron_volt + 3*Boltzmann*temperature)
+    return generation, heat, photon_flux, transmitted
