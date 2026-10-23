@@ -45,11 +45,11 @@ ChargeFabrica uses [fipy](https://github.com/usnistgov/fipy) to solve the semico
 </div>
 
 ## Installation
-ChargeFabrica requires the following packages to be installed: [numpy](https://github.com/numpy/numpy), [scipy](https://github.com/scipy/scipy), [fipy](https://github.com/usnistgov/fipy), [joblib](https://github.com/joblib/joblib), [pandas](https://github.com/pandas-dev/pandas), [xlrd](https://github.com/python-excel/xlrd), [matplotlib](https://github.com/matplotlib/matplotlib)
+ChargeFabrica requires [numpy](https://github.com/numpy/numpy), [scipy](https://github.com/scipy/scipy), [fipy](https://github.com/usnistgov/fipy), [joblib](https://github.com/joblib/joblib), and [matplotlib](https://github.com/matplotlib/matplotlib).
 
 The prerequisite packages can be installed using pip: 
 ```console
-pip install numpy scipy fipy pandas joblib xlrd matplotlib
+python -m pip install numpy scipy fipy joblib matplotlib
 ```
 The ChargeFabrica repo can then be cloned using the command:
 ```console
