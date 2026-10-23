@@ -8,7 +8,8 @@ os.environ["OMP_NUM_THREADS"] = "1" #Really important! Pysparse doesnt benefit f
 import numpy as np
 from mark_interface_file import mark_interfaces_mixed
 from calculate_absorption import calculate_absorption_above_bandgap
-from fipy import TransientTerm, DiffusionTerm, ExponentialConvectionTerm
+from fipy import TransientTerm, DiffusionTerm
+from newton_solver import LiveExponentialConvectionTerm as ExponentialConvectionTerm
 import fipy
 from fipy.tools import numerix
 from gummel_solver import solve_gummel
@@ -35,7 +36,7 @@ dx = 1.00e-9/StretchFactor #Pixel Width in meters
 dy = 1.00e-9/StretchFactor #Pixel Width in meters
 
 #Importing Absorbance Coefficient Spectrum for MAPbI3
-AbsorptionData = np.genfromtxt("MAPI_tailfit_nk 1.txt", delimiter=",", skip_header=1)
+AbsorptionData = np.genfromtxt(os.path.join(os.path.dirname(__file__), "MAPI_tailfit_nk 1.txt"), delimiter=",", skip_header=1)
 kdata = AbsorptionData[:, 2]
 alphadata = 4 * np.pi * kdata / (AbsorptionData[:, 0] * 1.00e-9)
 
@@ -152,11 +153,11 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     hole_drift = philocal.faceGrad + ChiCell.faceGrad + EgCell.faceGrad - D*LogNvCell.faceGrad
     anion_drift = philocal.faceGrad + ChiCell_a.faceGrad
     cation_drift = philocal.faceGrad + ChiCell_c.faceGrad
-    eqn = (0.00 == -TransientTerm(coeff=q, var=nlocal) + DiffusionTerm(coeff=q * D * nmob.harmonicFaceValue, var=nlocal) - ExponentialConvectionTerm(coeff=q * nmob.harmonicFaceValue * electron_drift, var=nlocal) + q*gen_rate - q*Recombination_Combined)
-    eqp = (0.00 == -TransientTerm(coeff=q, var=plocal) + DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=plocal) + ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * hole_drift, var=plocal) + q*gen_rate - q*Recombination_Combined)
-    eqa = (0.00 == -TransientTerm(coeff=q, var=alocal) + DiffusionTerm(coeff=q * D * anionmob.harmonicFaceValue, var=alocal) - ExponentialConvectionTerm(coeff=q * anionmob.harmonicFaceValue * anion_drift, var=alocal))
-    eqc = (0.00 == -TransientTerm(coeff=q, var=clocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=clocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * cation_drift, var=clocal))
-    eqc2plus = (0.00 == -TransientTerm(coeff=q, var=c2pluslocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=c2pluslocal) + ExponentialConvectionTerm(coeff=2.00 * q * cationmob.harmonicFaceValue * cation_drift, var=c2pluslocal))
+    eqn = (TransientTerm(coeff=q, var=nlocal) == DiffusionTerm(coeff=q * D * nmob.harmonicFaceValue, var=nlocal) - ExponentialConvectionTerm(coeff=q * nmob.harmonicFaceValue * electron_drift, var=nlocal) + q*gen_rate - q*Recombination_Combined)
+    eqp = (TransientTerm(coeff=q, var=plocal) == DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=plocal) + ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * hole_drift, var=plocal) + q*gen_rate - q*Recombination_Combined)
+    eqa = (TransientTerm(coeff=q, var=alocal) == DiffusionTerm(coeff=q * D * anionmob.harmonicFaceValue, var=alocal) - ExponentialConvectionTerm(coeff=q * anionmob.harmonicFaceValue * anion_drift, var=alocal))
+    eqc = (TransientTerm(coeff=q, var=clocal) == DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=clocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * cation_drift, var=clocal))
+    eqc2plus = (TransientTerm(coeff=q, var=c2pluslocal) == DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=c2pluslocal) + ExponentialConvectionTerm(coeff=2.00 * q * cationmob.harmonicFaceValue * cation_drift, var=c2pluslocal))
     eqpoisson = (TransientTerm(var=philocal) == DiffusionTerm(coeff=epsilon, var=philocal) + (q/epsilon_0) * (plocal - nlocal + clocal - alocal + 2.00*c2pluslocal - 2.00*a2pluslocal + NdCell - NaCell))
 
     # Shared iteration; device physics and equations remain above.

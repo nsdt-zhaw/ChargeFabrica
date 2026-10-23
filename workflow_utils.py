@@ -4,14 +4,6 @@ import os
 import glob
 import numpy as np
 
-def append_to_npy(output_dir, filename, new_data):
-    """Append one result along a new leading axis in a NumPy file."""
-    path = os.path.join(output_dir, filename)
-    new_data = np.expand_dims(new_data, axis=0)
-    if os.path.isfile(path):
-        new_data = np.concatenate((np.load(path), new_data), axis=0)
-    np.save(path, new_data)
-
 def run_sweep(simulate_device, script_path, sweep_folder,
               start_message, completed_message):
     """Create the output directory and run a simulation sweep."""
@@ -87,6 +79,5 @@ def load_results(output_dir, keys=None):
                 for key in keys)
 
 
-def load_voltage_points(output_dir, keys):
-    """Load selected voltage fields using the shared snapshot reader."""
-    return load_results(output_dir, keys)
+# Existing electrothermal plotters use this name for the same reader.
+load_voltage_points = load_results

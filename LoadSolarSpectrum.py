@@ -1,6 +1,6 @@
-import pandas as pd
+import os
+import numpy as np
 
-data = pd.read_excel('./Solar_Spectrum.xls', skiprows=2)
-grouped = data.groupby(data.iloc[:,0].round().astype(int)).mean()
-SolarSpectrumWavelength = grouped.index.values
-SolarSpectrumIrradiance = grouped.iloc[:, 2].values
+SolarSpectrumWavelength, SolarSpectrumIrradiance = np.loadtxt(
+    os.path.join(os.path.dirname(__file__), 'Solar_Spectrum.csv'),
+    delimiter=',', skiprows=1, unpack=True)

@@ -153,9 +153,8 @@ def _newton_limits(fields, physical_equations, equations, dt,
 
 def _solve_coupled(fields, equations, physical_equations, dt,
                    tolerance, limits, damping, max_iterations, linear_solver,
-                   update_transport_response, steady=False, min_dt=None,
-                   max_dt=None, verbose=False, line_search=True, potential_limit=.08):
-    """Solve candidate fields, apply their updates, and verify physical residuals."""
+                   update_transport_response, min_dt, max_dt, verbose=False):
+    """Relax the steady coupled system and verify its physical residuals."""
     if not isinstance(linear_solver, LinearLUSolver):
         raise ValueError('Newton requires a SciPy LinearLUSolver or MeshOrderedLinearLUSolver')
     block = equations[0]
@@ -181,7 +180,7 @@ def _solve_coupled(fields, equations, physical_equations, dt,
         history.append(residual)
         merit = float(np.max(norms/limits))
         if residual <= tolerance and merit <= 1:
-            verified = np.asarray([np.linalg.norm(_residual_vector(eq, dt=1e100 if steady else dt))
+            verified = np.asarray([np.linalg.norm(_residual_vector(eq, dt=1e100))
                                    for eq in physical_equations])
             if sum(verified) <= tolerance and np.all(verified <= limits):
                 history[-1] = float(sum(verified))
@@ -190,55 +189,30 @@ def _solve_coupled(fields, equations, physical_equations, dt,
             raise RuntimeError('Nonfinite coupled residual')
         if not np.all(np.isfinite(deltas)):
             raise RuntimeError('Nonfinite coupled field update')
-        alpha = damping
-        if not steady:
-            alpha = min(alpha, potential_limit/max(float(np.max(abs(deltas[0]))), potential_limit))
-            falling = deltas[3:] < 0
-            if np.any(falling):
-                alpha = min(alpha, .9*float(np.min(values[3:][falling]/(-deltas[3:][falling]))))
-        if alpha <= 0:
-            raise RuntimeError('Coupled positivity constraint admits no step')
-        search = not steady and line_search
-        # Use the raw merit far from convergence. Once the sum criterion
-        # passes, component limits drive unfinished continuity rows without
-        # demanding further gains in the Poisson roundoff residual.
-        use_components = residual <= tolerance
-        start_merit = max(residual/tolerance, merit) if use_components else residual/tolerance
-        for backtrack in range(20 if search else 1):
-            trial_values = values + (deltas if steady else alpha*deltas)
-            trial_values[1:3] = np.maximum(trial_values[1:3], 1e-30)
-            if steady:
-                trial_values = alpha*trial_values + (1-alpha)*np.asarray([field.old.value for field in fields])
-            for field, value in zip(fields, trial_values):
-                field.setValue(value)
-            if not search:
-                break
-            trial = np.asarray([np.linalg.norm(_residual_vector(eq, dt=dt)) for eq in physical_equations])
-            trial_merit = max(float(sum(trial))/tolerance, float(np.max(trial/limits)))
-            search_merit = trial_merit if use_components else float(sum(trial))/tolerance
-            if np.all(np.isfinite(trial)) and (trial_merit <= 1. or search_merit <= (1-1e-4*alpha)*start_merit):
-                break
-            alpha *= .5
-        else:
-            raise RuntimeError('Coupled Newton line search failed: dt=%g residual=%g component ratios=%s' % (dt, residual, norms/limits))
-        if steady:
-            dt = max(min_dt, dt*.1) if merit > previous_merit*1.2 else min(max_dt, dt*1.05)
-            for field in fields:
-                field.updateOld()
+        trial_values = values + deltas
+        trial_values[1:3] = np.maximum(trial_values[1:3], 1e-30)
+        trial_values = damping*trial_values + (1-damping)*np.asarray([field.old.value for field in fields])
+        for field, value in zip(fields, trial_values):
+            field.setValue(value)
+        dt = max(min_dt, dt*.1) if merit > previous_merit*1.2 else min(max_dt, dt*1.05)
+        for field in fields:
+            field.updateOld()
         previous_merit = merit
         if verbose and iteration % 5 == 0:
             print('iteration=%d residual=%.3g dt=%.3g alpha=%.3g time_per_iteration=%.3fs' %
-                  (iteration+1, residual, dt, alpha, _iteration_clock()-iteration_start))
+                  (iteration+1, residual, dt, damping, _iteration_clock()-iteration_start))
     raise RuntimeError('Coupled Newton did not converge after %d iterations: dt=%g residual=%g component ratios=%s' % (max_iterations, dt, history[-1], norms/limits))
 
 class LiveExponentialConvectionTerm(ExponentialConvectionTerm):
-    """Refresh contact interpolation weights as the potential changes.
+    """Refresh fitted interpolation when drift or diffusion changes.
 
-    FiPy 3.4.1 only builds constraintL/constraintB when absent, even though
-    exponential interpolation depends on the evolving drift coefficient.
-    This private-API workaround must be checked when upgrading FiPy.
+    Contact weights must follow the evolving drift. FiPy 4.0.3 also
+    snapshots mutable diffusion in its Peclet stencil (upstream PR #1225).
+    Electrothermal transport needs both caches refreshed as temperature changes.
     """
     def _buildMatrix(self, *args, **kwargs):
+        self.stencil = None
+        self.coeffMatrix = None
         self.__dict__.pop('constraintL', None)
         self.__dict__.pop('constraintB', None)
         return super(LiveExponentialConvectionTerm, self)._buildMatrix(*args, **kwargs)
@@ -295,7 +269,7 @@ def solve_newton_coupled(fields, equations, dt=1e-7, max_dt=1e-5,
     result, iterations, values = _solve_coupled(fields, equations,
         physical_equations, dt, tolerance, limits, damping, max_steps,
         MeshOrderedLinearLUSolver(fields[0].mesh, tolerance=1e-12, iterations=1) if linear_solver is None else linear_solver,
-        update_transport_response, steady=True, min_dt=min_dt, max_dt=max_dt,
+        update_transport_response, min_dt=min_dt, max_dt=max_dt,
         verbose=verbose)
     history = np.full(max_steps, np.nan)
     history[:len(values)] = values

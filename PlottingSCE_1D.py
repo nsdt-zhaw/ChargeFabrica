@@ -1,9 +1,10 @@
 import numpy as np
+import sys
 from workflow_utils import load_results
 import matplotlib.pyplot as plt
 
 #Plotting code for Spatial Collection Efficiency (SCE) calculation from 1D drift-diffusion simulation data
-Simulation_folder = "./Outputs/1D_NIP_SCE_Example/VoltageSweep/"
+Simulation_folder = sys.argv[1] if len(sys.argv) > 1 else "./Outputs/1D_NIP_SCE_Example/VoltageSweep/"
 
 results = load_results(Simulation_folder, keys=[
     'JnY', 'JpY', 'GenValues_Matrix',

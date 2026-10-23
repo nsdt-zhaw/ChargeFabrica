@@ -40,9 +40,6 @@ def map_semiconductor_property(values, prop):
 def map_electrode_property(values, prop):
     return _map_property(values, prop, Electrodes)
 
-def map_props(values, props, table):
-    return [_map_property(values, prop, table) for prop in props]
-
 Semiconductors = _load_materials("Semiconductors")
 Electrodes = _load_materials("Electrodes")
 name_to_code_SC = {material.name: code for code, material in Semiconductors.items()}

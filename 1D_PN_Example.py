@@ -4,7 +4,8 @@
 import os
 os.environ["OMP_NUM_THREADS"] = "1" #Really important! Pysparse doesnt benefit from multithreading.
 import numpy as np
-from fipy import TransientTerm, DiffusionTerm, ExponentialConvectionTerm
+from fipy import TransientTerm, DiffusionTerm
+from newton_solver import LiveExponentialConvectionTerm as ExponentialConvectionTerm
 import fipy
 from fipy.tools import numerix
 from gummel_solver import solve_gummel
@@ -98,10 +99,10 @@ def solve_for_voltage(voltage, n_values, p_values, a_values, c_values, phi_value
     hole_drift = philocal.faceGrad + ChiCell.faceGrad + EgCell.faceGrad - D*LogNvCell.faceGrad
     anion_drift = philocal.faceGrad + ChiCell_a.faceGrad
     cation_drift = philocal.faceGrad + ChiCell_c.faceGrad
-    eqn = (0.00 == -TransientTerm(coeff=q, var=nlocal) + DiffusionTerm(coeff=q * D * nmob.harmonicFaceValue, var=nlocal) - ExponentialConvectionTerm(coeff=q * nmob.harmonicFaceValue * electron_drift, var=nlocal) + q*gen_rate)
-    eqp = (0.00 == -TransientTerm(coeff=q, var=plocal) + DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=plocal) + ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * hole_drift, var=plocal) + q*gen_rate)
-    eqa = (0.00 == -TransientTerm(coeff=q, var=alocal) + DiffusionTerm(coeff=q * D * anionmob.harmonicFaceValue, var=alocal) - ExponentialConvectionTerm(coeff=q * anionmob.harmonicFaceValue * anion_drift, var=alocal))
-    eqc = (0.00 == -TransientTerm(coeff=q, var=clocal) + DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=clocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * cation_drift, var=clocal))
+    eqn = (TransientTerm(coeff=q, var=nlocal) == DiffusionTerm(coeff=q * D * nmob.harmonicFaceValue, var=nlocal) - ExponentialConvectionTerm(coeff=q * nmob.harmonicFaceValue * electron_drift, var=nlocal) + q*gen_rate)
+    eqp = (TransientTerm(coeff=q, var=plocal) == DiffusionTerm(coeff=q * D * pmob.harmonicFaceValue, var=plocal) + ExponentialConvectionTerm(coeff=q * pmob.harmonicFaceValue * hole_drift, var=plocal) + q*gen_rate)
+    eqa = (TransientTerm(coeff=q, var=alocal) == DiffusionTerm(coeff=q * D * anionmob.harmonicFaceValue, var=alocal) - ExponentialConvectionTerm(coeff=q * anionmob.harmonicFaceValue * anion_drift, var=alocal))
+    eqc = (TransientTerm(coeff=q, var=clocal) == DiffusionTerm(coeff=q * D * cationmob.harmonicFaceValue, var=clocal) + ExponentialConvectionTerm(coeff=q * cationmob.harmonicFaceValue * cation_drift, var=clocal))
     eqpoisson = (TransientTerm(var=philocal) == DiffusionTerm(coeff=epsilon, var=philocal) + (q/epsilon_0) * (plocal - nlocal + clocal - alocal + NdCell - NaCell))
 
     # Shared iteration; device physics and equations remain above.

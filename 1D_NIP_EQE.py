@@ -35,7 +35,7 @@ dx = 1.00e-9/StretchFactor #Pixel Width in meters
 dy = 1.00e-9/StretchFactor #Pixel Width in meters
 
 #Importing Absorbance Coefficient Spectrum for MAPbI3
-AbsorptionData = np.genfromtxt("MAPI_tailfit_nk 1.txt", delimiter=",", skip_header=1)
+AbsorptionData = np.genfromtxt(os.path.join(os.path.dirname(__file__), "MAPI_tailfit_nk 1.txt"), delimiter=",", skip_header=1)
 kdata = AbsorptionData[:, 2]
 alphadata = 4 * np.pi * kdata / (AbsorptionData[:, 0] * 1.00e-9)
 

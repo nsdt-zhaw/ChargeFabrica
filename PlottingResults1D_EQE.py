@@ -1,13 +1,11 @@
 import numpy as np
 import os
+import sys
 from workflow_utils import load_results
 import matplotlib.pyplot as plt
 
 # Requires a completed EQE simulation folder
-Simulation_folder = "./Outputs/1D_NIP_EQE/WavelengthSweep/"
-
-NumberOfSuns = 1.00
-ScalingFactor = 1.00
+Simulation_folder = sys.argv[1] if len(sys.argv) > 1 else "./Outputs/1D_NIP_EQE/WavelengthSweep/"
 
 # Load one ordered snapshot, including legacy per-field files.
 results = load_results(Simulation_folder, keys=[

@@ -1,35 +1,23 @@
 import numpy as np
 from workflow_utils import load_results
+import sys
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
-from matplotlib.colors import Normalize
 from matplotlib.widgets import Slider
 from scipy.interpolate import interp1d
 
-Simulation_folder = "./Outputs/2D_HTL_Free_Carbon_Device_IONS_Newton_Example/VoltageSweep/"
+Simulation_folder = sys.argv[1] if len(sys.argv) > 1 else "./Outputs/2D_HTL_Free_Carbon_Device_IONS_Newton_Example/VoltageSweep/"
 results = load_results(Simulation_folder, keys=[
-    'AnionDensityMatrix', 'CationDensityMatrix', 'ChiMatrix',
+    'AnionDensityMatrix', 'CationDensityMatrix',
     'JnY', 'JpY', 'Efield_matrix',
-    'EgMatrix', 'GenValues_Matrix', 'NMatrix',
+    'GenValues_Matrix', 'NMatrix',
     'PMatrix', 'PotentialMatrix', 'RecombinationMatrix',
     'Recombination_Bimolecular_EQMatrix', 'ResidualArray', 'ResidualMatrix',
-    'SweepCounterMatrix', 'applied_voltages', 'psinvarmatrix',
+    'applied_voltages', 'psinvarmatrix',
     'psipvarmatrix'])
 
 NumberOfSuns = 1.00
-
-class PercentileNormalizer(Normalize):
-    def __init__(self, vmin=None, vmax=None, clip=False, lower_percentile=3, upper_percentile=97):
-        self.lower_percentile = lower_percentile
-        self.upper_percentile = upper_percentile
-        Normalize.__init__(self, vmin, vmax, clip)
-
-    def autoscale_None(self, A):
-        if self.vmin is None and np.size(A) > 0:
-            self.vmin = np.percentile(A, self.lower_percentile)
-        if self.vmax is None and np.size(A) > 0:
-            self.vmax = np.percentile(A, self.upper_percentile)
 
 # Load matrices as before
 GenerationMatrix = results["GenValues_Matrix"]
@@ -42,7 +30,6 @@ Jp_Matrix = results["JpY"][:, 1:-1]
 JTotal_Y = (Jn_Matrix + Jp_Matrix)
 
 JTotal_Y_mean = (results["JnY"][:, -1] + results["JpY"][:, -1]).mean(axis=1)
-VocLocation = np.unravel_index(np.argmin(np.abs(JTotal_Y_mean)), JTotal_Y_mean.shape)
 
 PLYield = 100*RadiativeRecombinationMatrix / (GenerationMatrix+1)
 
@@ -50,16 +37,11 @@ PotentialMatrix = results["PotentialMatrix"]
 EField_matrix = -results["Efield_matrix"][:,1,:,:]
 psinvarmatrix = results["psinvarmatrix"]
 psipvarmatrix = results["psipvarmatrix"]
-ChiMatrix = results["ChiMatrix"]
-EgMatrix = results["EgMatrix"]
 AnionDensityMatrix = results["AnionDensityMatrix"]
 CationDensityMatrix = results["CationDensityMatrix"]
-AnionDensityMatrix = AnionDensityMatrix.reshape((AnionDensityMatrix.shape[0], NMatrix.shape[1], NMatrix.shape[2]))
-CationDensityMatrix = CationDensityMatrix.reshape((CationDensityMatrix.shape[0], NMatrix.shape[1], NMatrix.shape[2]))
 ResidualMatrix = results["ResidualMatrix"]
 ResidualArray = results["ResidualArray"][:]
 
-SweepCounterMatrix = results["SweepCounterMatrix"]
 applied_voltages = results["applied_voltages"]
 
 #Create a plot where residualarray over time is shown for different applied voltages
@@ -74,9 +56,6 @@ ax4.legend()
 plt.show(block=False)
 
 
-import copy
-my_cmap = copy.copy(plt.cm.get_cmap('hot')) # copy the default cmap
-my_cmap.set_bad((0,0,0))
 
 titles = ['EField_Y (V/m)', 'Electron Density (1/m3)', 'Hole Density (1/m3)', "Anion Density (1/m3)",
           "Cation Density (1/m3)", 'Generation Rate (1/m3)', 'JTotal_Y (A/m2)', 'Potential (V)',
@@ -88,29 +67,22 @@ data_matrices = [EField_matrix, NMatrix, PMatrix, AnionDensityMatrix, CationDens
                  psinvarmatrix, psipvarmatrix,
                  Jn_Matrix, Jp_Matrix]
 
-num_plots = len(data_matrices)
 
 # Set up subplots
-fig, axs = plt.subplots(3, 5, figsize=(12, 10))
+fig, axs = plt.subplots(3, 5, figsize=(16, 10))
 axs = axs.ravel()
 
 # Initial plot setup
 cax_list = []
-colorbars = []
-
-norms = []
 for i, matrix in enumerate(data_matrices):
-    norm = PercentileNormalizer(lower_percentile=3, upper_percentile=97)
-    norms.append(norm)
-    norm.autoscale_None(matrix[0])
-    cax = axs[i].imshow(matrix[0], cmap='viridis', norm=norm)
-    cbar = fig.colorbar(cax, ax=axs[i])
-    axs[i].set_title("{} at {:.3f} V".format(titles[i], applied_voltages[0]))
+    vmin, vmax = np.percentile(matrix[0], [3, 97])
+    cax = axs[i].imshow(matrix[0], cmap='viridis', vmin=vmin, vmax=vmax)
+    fig.colorbar(cax, ax=axs[i])
+    axs[i].set_title("{}\n{:.3f} V".format(titles[i], applied_voltages[0]), fontsize=9)
     cax_list.append(cax)
-    colorbars.append(cbar)
 
 # Adjust subplot parameters for a better fit
-fig.subplots_adjust(left=0.12, right=0.88, top=0.93, bottom=0.12, wspace=0.2, hspace=0.4)
+fig.subplots_adjust(left=0.06, right=0.96, top=0.93, bottom=0.12, wspace=0.6, hspace=0.5)
 
 # Slider axis (center slider position to avoid left gap)
 slider_ax = plt.axes([0.2, 0.03, 0.6, 0.025])
@@ -118,18 +90,12 @@ slider = Slider(ax=slider_ax, label='Voltage [V]', valmin=applied_voltages.min()
 
 # Find an interpolation function from voltage to indices
 
-JTotal_Y_mean = np.mean(JTotal_Y[:,20:80,:], axis=(1, 2))
 
 if len(applied_voltages) > 3 and applied_voltages.min() <= 0 <= applied_voltages.max():
     # Interpolate JTotal_Y_mean over a larger set of voltages
     f_interp = interp1d(applied_voltages, JTotal_Y_mean, kind='linear')
     voltage_fine = np.linspace(applied_voltages[0], applied_voltages[-1], 1000)
     JTotal_Y_fine = f_interp(voltage_fine)
-
-    # Compute the zero crossing for Voc
-    Voc = voltage_fine[np.argmin(np.abs(JTotal_Y_fine))]
-    # Compute Jsc as the interpolated value at 0 voltage
-    Jsc = -f_interp(0)
 
     #Compute efficiency by determining the maximum power point
     max_power_index = np.argmin(JTotal_Y_fine * voltage_fine)
@@ -158,8 +124,6 @@ if len(applied_voltages) > 3 and applied_voltages.min() <= 0 <= applied_voltages
     ax2.text(0.05, 0.60, "MPP: {:.3f} V, {:.3f} A/m^2".format(max_power_voltage, max_power_current), fontsize=8, transform=ax2.transAxes)
 
     #ax2.set_ylim(-Jsc-10, Jsc+10)
-    ax2.set_ylim(-250 - 10, 250 + 10)
-    ax2.set_xlim(-0.3, 1.4)
     #Twin y axis
     ax3 = ax2.twinx()
     #ax3.plot(applied_voltages, SweepCounterMatrix)
@@ -171,8 +135,6 @@ if len(applied_voltages) > 3 and applied_voltages.min() <= 0 <= applied_voltages
     axs[-1].plot(voltage_fine, JTotal_Y_fine)
     axs[-1].set_xlabel("Applied Voltage (V)")
     axs[-1].set_title("JV Curve (A/m2)")
-    axs[-1].set_ylim(-200 - 10, 250 + 10)
-    axs[-1].set_xlim(-0.1, 1.2)
 
 # Slider update function
 def update(val):
@@ -182,10 +144,8 @@ def update(val):
 
     for i, matrix in enumerate(data_matrices):
         cax_list[i].set_data(matrix[frame])
-        norms[i].autoscale_None(matrix[frame])  # re-autoscale for each frame, optional
-        cax_list[i].set_norm(norms[i])
-        axs[i].set_title("{} at {:.3f} V".format(titles[i], applied_voltages[frame]))
-        cax_list[i].autoscale()
+        cax_list[i].set_clim(*np.percentile(matrix[frame], [3, 97]))
+        axs[i].set_title("{}\n{:.3f} V".format(titles[i], applied_voltages[frame]), fontsize=9)
 
     fig.canvas.draw_idle()
 
